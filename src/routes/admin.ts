@@ -1,6 +1,8 @@
-import { getBearerToken, signAdminJwt, verifyAdminJwt } from "../auth/jwt";
+import { requireAdmin } from "../auth/adminGuard";
+import { signAdminJwt } from "../auth/jwt";
 import { verifyPassword } from "../auth/passwords";
-import { findActiveAdminByEmail, findActiveAdminById } from "../db/adminUsers";
+import { findActiveAdminByEmail } from "../db/adminUsers";
+import { listAdminSubmissions } from "../db/adminSubmissions";
 import { badRequest, json, methodNotAllowed, notFound, serverError, unauthorized } from "../http/responses";
 import type { Env } from "../types";
 
@@ -25,6 +27,14 @@ export async function adminRoutes(
     }
 
     return me(request, env);
+  }
+
+  if (url.pathname === "/api/admin/submissions") {
+    if (request.method !== "GET") {
+      return methodNotAllowed();
+    }
+
+    return submissions(request, env);
   }
 
   return notFound();
@@ -83,35 +93,82 @@ async function login(request: Request, env: Env): Promise<Response> {
 }
 
 async function me(request: Request, env: Env): Promise<Response> {
-  const token = getBearerToken(request);
-
-  if (!token) {
-    return unauthorized();
-  }
-
   try {
-    const tokenAdmin = await verifyAdminJwt(token, env);
+    const auth = await requireAdmin(request, env);
 
-    if (!tokenAdmin) {
-      return unauthorized();
-    }
-
-    const admin = await findActiveAdminById(env, tokenAdmin.id);
-
-    if (!admin) {
-      return unauthorized();
+    if (auth.response) {
+      return auth.response;
     }
 
     return json({
       success: true,
       data: {
-        admin
+        admin: auth.admin
       }
     });
   } catch (error) {
     console.error("Failed admin me lookup", error);
     return serverError("Unable to load admin profile.");
   }
+}
+
+async function submissions(request: Request, env: Env): Promise<Response> {
+  try {
+    const auth = await requireAdmin(request, env);
+
+    if (auth.response) {
+      return auth.response;
+    }
+
+    const url = new URL(request.url);
+    const filters = parseSubmissionFilters(url.searchParams);
+    const submissions = await listAdminSubmissions(env, filters);
+
+    return json({
+      success: true,
+      data: {
+        submissions
+      }
+    });
+  } catch (error) {
+    console.error("Failed admin submissions lookup", error);
+    return serverError("Unable to load submissions.");
+  }
+}
+
+function parseSubmissionFilters(searchParams: URLSearchParams) {
+  const status = normalizeOptionalString(searchParams.get("status"));
+  const archived = normalizeOptionalBoolean(searchParams.get("archived"));
+  const servingAreaId = normalizeOptionalPositiveInteger(searchParams.get("servingAreaId"));
+  const search = normalizeOptionalString(searchParams.get("search"));
+
+  return {
+    status,
+    archived,
+    servingAreaId,
+    search
+  };
+}
+
+function normalizeOptionalString(value: string | null): string | undefined {
+  return value && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function normalizeOptionalBoolean(value: string | null): boolean | undefined {
+  if (value === "true") return true;
+  if (value === "false") return false;
+
+  return undefined;
+}
+
+function normalizeOptionalPositiveInteger(value: string | null): number | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const numberValue = Number(value);
+
+  return Number.isInteger(numberValue) && numberValue > 0 ? numberValue : undefined;
 }
 
 function normalizeRequiredString(value: unknown): string | null {
