@@ -43,11 +43,12 @@ Use Node.js 22 or newer. Current Wrangler releases require Node 22+.
 - `GET /health`
 - `GET /api`
 - `GET /api/serving-areas`
+- `POST /api/volunteer-submissions`
 - `POST /api/auth/login` placeholder
 - `GET /api/volunteers` placeholder
 - `POST /api/volunteers` placeholder
 
-`GET /api/serving-areas` is backed by D1 seed data. The other API routes are placeholders until their V1 phases are implemented.
+`GET /api/serving-areas` and `POST /api/volunteer-submissions` are backed by D1. The other API routes are placeholders until their V1 phases are implemented.
 
 ## Local D1
 
@@ -67,4 +68,33 @@ Test the first real public endpoint:
 
 ```sh
 curl http://localhost:8787/api/serving-areas
+```
+
+Create a volunteer submission:
+
+```sh
+curl -X POST http://localhost:8787/api/volunteer-submissions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "firstName": "Dionne",
+    "lastName": "Stratton",
+    "email": "example@email.com",
+    "phone": "555-555-5555",
+    "preferredContactMethod": "text",
+    "overallFrequency": "every_week",
+    "availability": ["sunday_morning"],
+    "openToSpecialEvents": true,
+    "experienceNotes": "I have experience with slides and media.",
+    "additionalNotes": "I prefer not to miss more than one Sunday service per month.",
+    "interests": [
+      {
+        "servingAreaId": 4,
+        "usesAreaSpecificFrequency": false,
+        "areaSpecificFrequency": null,
+        "experienceLevel": "experienced",
+        "interestNotes": "I can run slides most Sundays."
+      }
+    ],
+    "requirementConfirmations": []
+  }'
 ```

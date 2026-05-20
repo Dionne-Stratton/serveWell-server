@@ -24,6 +24,13 @@ export function methodNotAllowed(): Response {
   );
 }
 
+export function badRequest(message: string, code = "VALIDATION_ERROR"): Response {
+  return json(
+    { success: false, error: { message, code } },
+    { status: 400 }
+  );
+}
+
 export function serverError(message = "Something went wrong."): Response {
   return json(
     { success: false, error: { message, code: "INTERNAL_SERVER_ERROR" } },

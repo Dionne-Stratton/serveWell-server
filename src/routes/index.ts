@@ -1,5 +1,6 @@
 import { authRoutes } from "./auth";
 import { servingAreaRoutes } from "./servingAreas";
+import { volunteerSubmissionRoutes } from "./volunteerSubmissions";
 import { volunteerRoutes } from "./volunteers";
 import { json, notFound } from "../http/responses";
 import type { Env } from "../types";
@@ -34,6 +35,10 @@ export async function routeRequest(
 
   if (url.pathname.startsWith("/api/serving-areas")) {
     return servingAreaRoutes(request, env, ctx);
+  }
+
+  if (url.pathname.startsWith("/api/volunteer-submissions")) {
+    return volunteerSubmissionRoutes(request, env, ctx);
   }
 
   if (url.pathname.startsWith("/api/auth")) {
