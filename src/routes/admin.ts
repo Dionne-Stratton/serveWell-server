@@ -2,7 +2,7 @@ import { requireAdmin } from "../auth/adminGuard";
 import { signAdminJwt } from "../auth/jwt";
 import { verifyPassword } from "../auth/passwords";
 import { findActiveAdminByEmail } from "../db/adminUsers";
-import { listAdminSubmissions } from "../db/adminSubmissions";
+import { getAdminSubmissionDetail, listAdminSubmissions } from "../db/adminSubmissions";
 import { badRequest, json, methodNotAllowed, notFound, serverError, unauthorized } from "../http/responses";
 import type { Env } from "../types";
 
@@ -35,6 +35,16 @@ export async function adminRoutes(
     }
 
     return submissions(request, env);
+  }
+
+  const submissionDetailMatch = url.pathname.match(/^\/api\/admin\/submissions\/(\d+)$/);
+
+  if (submissionDetailMatch) {
+    if (request.method !== "GET") {
+      return methodNotAllowed();
+    }
+
+    return submissionDetail(request, env, Number(submissionDetailMatch[1]));
   }
 
   return notFound();
@@ -133,6 +143,34 @@ async function submissions(request: Request, env: Env): Promise<Response> {
   } catch (error) {
     console.error("Failed admin submissions lookup", error);
     return serverError("Unable to load submissions.");
+  }
+}
+
+async function submissionDetail(
+  request: Request,
+  env: Env,
+  submissionId: number
+): Promise<Response> {
+  try {
+    const auth = await requireAdmin(request, env);
+
+    if (auth.response) {
+      return auth.response;
+    }
+
+    const detail = await getAdminSubmissionDetail(env, submissionId);
+
+    if (!detail) {
+      return notFound();
+    }
+
+    return json({
+      success: true,
+      data: detail
+    });
+  } catch (error) {
+    console.error("Failed admin submission detail lookup", error);
+    return serverError("Unable to load submission.");
   }
 }
 

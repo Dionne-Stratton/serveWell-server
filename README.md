@@ -47,6 +47,7 @@ Use Node.js 22 or newer. Current Wrangler releases require Node 22+.
 - `POST /api/admin/login`
 - `GET /api/admin/me`
 - `GET /api/admin/submissions`
+- `GET /api/admin/submissions/:id`
 - `POST /api/auth/login` placeholder
 - `GET /api/volunteers` placeholder
 - `POST /api/volunteers` placeholder
