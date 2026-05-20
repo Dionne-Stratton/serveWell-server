@@ -1,0 +1,13 @@
+name = "servewell-server"
+main = "src/index.ts"
+compatibility_date = "2026-05-19"
+
+[vars]
+ENVIRONMENT = "development"
+FRONTEND_ORIGIN = "http://localhost:5173"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "servewell-db"
+database_id = "replace-with-cloudflare-d1-database-id"
+migrations_dir = "migrations"

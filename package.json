@@ -1,0 +1,22 @@
+{
+  "name": "servewell-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "d1:migrations:list": "wrangler d1 migrations list servewell-db",
+    "d1:migrations:apply:local": "wrangler d1 migrations apply servewell-db --local",
+    "d1:migrations:apply:remote": "wrangler d1 migrations apply servewell-db --remote"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "latest",
+    "typescript": "latest",
+    "wrangler": "latest"
+  }
+}
