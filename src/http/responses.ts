@@ -11,9 +11,22 @@ export function json<T>(body: ApiResponseBody<T>, init: ResponseInit = {}): Resp
 }
 
 export function notFound(): Response {
-  return json({ ok: false, error: "Not found" }, { status: 404 });
+  return json(
+    { success: false, error: { message: "Not found.", code: "NOT_FOUND" } },
+    { status: 404 }
+  );
 }
 
 export function methodNotAllowed(): Response {
-  return json({ ok: false, error: "Method not allowed" }, { status: 405 });
+  return json(
+    { success: false, error: { message: "Method not allowed.", code: "METHOD_NOT_ALLOWED" } },
+    { status: 405 }
+  );
+}
+
+export function serverError(message = "Something went wrong."): Response {
+  return json(
+    { success: false, error: { message, code: "INTERNAL_SERVER_ERROR" } },
+    { status: 500 }
+  );
 }

@@ -12,8 +12,11 @@ export async function volunteerRoutes(
     if (request.method === "GET") {
       return json(
         {
-          ok: false,
-          error: "Volunteer list route placeholder. Business logic has not been implemented yet."
+          success: false,
+          error: {
+            message: "Volunteer list route placeholder. Business logic has not been implemented yet.",
+            code: "NOT_IMPLEMENTED"
+          }
         },
         { status: 501 }
       );
@@ -22,8 +25,11 @@ export async function volunteerRoutes(
     if (request.method === "POST") {
       return json(
         {
-          ok: false,
-          error: "Volunteer intake route placeholder. Business logic has not been implemented yet."
+          success: false,
+          error: {
+            message: "Volunteer intake route placeholder. Business logic has not been implemented yet.",
+            code: "NOT_IMPLEMENTED"
+          }
         },
         { status: 501 }
       );

@@ -42,8 +42,29 @@ Use Node.js 22 or newer. Current Wrangler releases require Node 22+.
 
 - `GET /health`
 - `GET /api`
-- `POST /api/auth/login`
-- `GET /api/volunteers`
-- `POST /api/volunteers`
+- `GET /api/serving-areas`
+- `POST /api/auth/login` placeholder
+- `GET /api/volunteers` placeholder
+- `POST /api/volunteers` placeholder
 
-These are placeholders only. Business logic has not been implemented yet.
+`GET /api/serving-areas` is backed by D1 seed data. The other API routes are placeholders until their V1 phases are implemented.
+
+## Local D1
+
+Apply migrations locally:
+
+```sh
+npm run d1:migrations:apply:local
+```
+
+Then start the Worker:
+
+```sh
+npm run dev
+```
+
+Test the first real public endpoint:
+
+```sh
+curl http://localhost:8787/api/serving-areas
+```

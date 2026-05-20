@@ -6,7 +6,10 @@ export interface Env {
 }
 
 export interface ApiResponseBody<T = unknown> {
-  ok: boolean;
+  success: boolean;
   data?: T;
-  error?: string;
+  error?: {
+    message: string;
+    code: string;
+  };
 }

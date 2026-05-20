@@ -1,4 +1,5 @@
 import { authRoutes } from "./auth";
+import { servingAreaRoutes } from "./servingAreas";
 import { volunteerRoutes } from "./volunteers";
 import { json, notFound } from "../http/responses";
 import type { Env } from "../types";
@@ -12,7 +13,7 @@ export async function routeRequest(
 
   if (url.pathname === "/health" && request.method === "GET") {
     return json({
-      ok: true,
+      success: true,
       data: {
         service: "servewell-server",
         status: "healthy",
@@ -23,12 +24,16 @@ export async function routeRequest(
 
   if (url.pathname === "/api" && request.method === "GET") {
     return json({
-      ok: true,
+      success: true,
       data: {
         name: "ServeWell API",
         version: "0.1.0"
       }
     });
+  }
+
+  if (url.pathname.startsWith("/api/serving-areas")) {
+    return servingAreaRoutes(request, env, ctx);
   }
 
   if (url.pathname.startsWith("/api/auth")) {

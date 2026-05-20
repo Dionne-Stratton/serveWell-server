@@ -15,8 +15,11 @@ export async function authRoutes(
 
     return json(
       {
-        ok: false,
-        error: "Login route placeholder. Business logic has not been implemented yet."
+        success: false,
+        error: {
+          message: "Login route placeholder. Business logic has not been implemented yet.",
+          code: "NOT_IMPLEMENTED"
+        }
       },
       { status: 501 }
     );
