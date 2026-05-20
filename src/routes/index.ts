@@ -1,3 +1,4 @@
+import { adminRoutes } from "./admin";
 import { authRoutes } from "./auth";
 import { servingAreaRoutes } from "./servingAreas";
 import { volunteerSubmissionRoutes } from "./volunteerSubmissions";
@@ -39,6 +40,10 @@ export async function routeRequest(
 
   if (url.pathname.startsWith("/api/volunteer-submissions")) {
     return volunteerSubmissionRoutes(request, env, ctx);
+  }
+
+  if (url.pathname.startsWith("/api/admin")) {
+    return adminRoutes(request, env, ctx);
   }
 
   if (url.pathname.startsWith("/api/auth")) {

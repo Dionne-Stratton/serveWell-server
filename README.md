@@ -44,11 +44,13 @@ Use Node.js 22 or newer. Current Wrangler releases require Node 22+.
 - `GET /api`
 - `GET /api/serving-areas`
 - `POST /api/volunteer-submissions`
+- `POST /api/admin/login`
+- `GET /api/admin/me`
 - `POST /api/auth/login` placeholder
 - `GET /api/volunteers` placeholder
 - `POST /api/volunteers` placeholder
 
-`GET /api/serving-areas` and `POST /api/volunteer-submissions` are backed by D1. The other API routes are placeholders until their V1 phases are implemented.
+`GET /api/serving-areas`, `POST /api/volunteer-submissions`, and the admin auth routes are backed by D1. The other API routes are placeholders until their V1 phases are implemented.
 
 ## Local D1
 
@@ -68,6 +70,14 @@ Test the first real public endpoint:
 
 ```sh
 curl http://localhost:8787/api/serving-areas
+```
+
+Log in with the seeded demo admin:
+
+```sh
+curl -X POST http://localhost:8787/api/admin/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"church@example.com","password":"temporary-password"}'
 ```
 
 Create a volunteer submission:

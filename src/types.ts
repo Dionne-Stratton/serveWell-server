@@ -13,3 +13,10 @@ export interface ApiResponseBody<T = unknown> {
     code: string;
   };
 }
+
+export interface AdminUser {
+  id: number;
+  email: string;
+  displayName: string;
+  role: "admin";
+}

@@ -31,6 +31,13 @@ export function badRequest(message: string, code = "VALIDATION_ERROR"): Response
   );
 }
 
+export function unauthorized(message = "Unauthorized."): Response {
+  return json(
+    { success: false, error: { message, code: "UNAUTHORIZED" } },
+    { status: 401 }
+  );
+}
+
 export function serverError(message = "Something went wrong."): Response {
   return json(
     { success: false, error: { message, code: "INTERNAL_SERVER_ERROR" } },
