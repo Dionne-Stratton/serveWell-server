@@ -1,22 +1,19 @@
-import { getFrontendOrigin } from "../env";
-import type { Env } from "../types";
-
-export function corsHeaders(env: Env): Record<string, string> {
+export function corsHeaders(): Record<string, string> {
   return {
-    "Access-Control-Allow-Origin": getFrontendOrigin(env),
+    "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    "Access-Control-Max-Age": "86400"
+    "Access-Control-Max-Age": "86400",
   };
 }
 
-export function handleCorsPreflight(request: Request, env: Env): Response | null {
+export function handleCorsPreflight(request: Request): Response | null {
   if (request.method !== "OPTIONS") {
     return null;
   }
 
   return new Response(null, {
     status: 204,
-    headers: corsHeaders(env)
+    headers: corsHeaders(),
   });
 }

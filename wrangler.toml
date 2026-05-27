@@ -4,13 +4,9 @@ compatibility_date = "2026-05-19"
 
 [vars]
 ENVIRONMENT = "development"
-FRONTEND_ORIGIN = "http://localhost:5173"
-
-[secrets]
-required = ["JWT_SECRET"]
 
 [[d1_databases]]
 binding = "DB"
 database_name = "servewell-db"
-database_id = "replace-with-cloudflare-d1-database-id"
+database_id = "df69f42c-0622-4017-8070-77f831d9cf39"
 migrations_dir = "migrations"
