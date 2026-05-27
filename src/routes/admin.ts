@@ -3,9 +3,15 @@ import { signAdminJwt } from "../auth/jwt";
 import { verifyPassword } from "../auth/passwords";
 import { findActiveAdminByEmail } from "../db/adminUsers";
 import { findActiveOrganizationById, mapPublicOrganization } from "../db/organizations";
-import { getAdminSubmissionDetail, listAdminSubmissions } from "../db/adminSubmissions";
+import {
+  deleteAdminSubmission,
+  getAdminSubmissionDetail,
+  listAdminSubmissions,
+  updateAdminSubmission
+} from "../db/adminSubmissions";
 import { badRequest, json, methodNotAllowed, notFound, serverError, unauthorized } from "../http/responses";
 import type { Env } from "../types";
+import { isOneOf, submissionStatuses } from "../validation/enums";
 
 export async function adminRoutes(
   request: Request,
@@ -41,11 +47,21 @@ export async function adminRoutes(
   const submissionDetailMatch = url.pathname.match(/^\/api\/admin\/submissions\/(\d+)$/);
 
   if (submissionDetailMatch) {
-    if (request.method !== "GET") {
-      return methodNotAllowed();
+    const submissionId = Number(submissionDetailMatch[1]);
+
+    if (request.method === "GET") {
+      return submissionDetail(request, env, submissionId);
     }
 
-    return submissionDetail(request, env, Number(submissionDetailMatch[1]));
+    if (request.method === "PATCH") {
+      return patchSubmission(request, env, submissionId);
+    }
+
+    if (request.method === "DELETE") {
+      return deleteSubmission(request, env, submissionId);
+    }
+
+    return methodNotAllowed();
   }
 
   return notFound();
@@ -196,13 +212,118 @@ async function submissionDetail(
   }
 }
 
+async function patchSubmission(
+  request: Request,
+  env: Env,
+  submissionId: number
+): Promise<Response> {
+  try {
+    const auth = await requireAdmin(request, env);
+
+    if (auth.response) {
+      return auth.response;
+    }
+
+    let body: unknown;
+
+    try {
+      body = await request.json();
+    } catch {
+      return badRequest("Request body must be valid JSON.", "INVALID_JSON");
+    }
+
+    if (!isRecord(body)) {
+      return badRequest("Request body must be a JSON object.");
+    }
+
+    const updateInput: { status?: string; isArchived?: boolean } = {};
+
+    if (body.status !== undefined) {
+      if (!isOneOf(body.status, submissionStatuses)) {
+        return badRequest("Invalid submission status.");
+      }
+
+      updateInput.status = body.status;
+    }
+
+    if (body.isArchived !== undefined) {
+      if (typeof body.isArchived !== "boolean") {
+        return badRequest("isArchived must be a boolean.");
+      }
+
+      updateInput.isArchived = body.isArchived;
+    }
+
+    if (updateInput.status === undefined && updateInput.isArchived === undefined) {
+      return badRequest("Provide at least one field to update.");
+    }
+
+    const updated = await updateAdminSubmission(
+      env,
+      submissionId,
+      auth.admin!.organizationId,
+      updateInput
+    );
+
+    if (!updated) {
+      return notFound();
+    }
+
+    return json({
+      success: true,
+      data: {
+        submission: updated
+      }
+    });
+  } catch (error) {
+    console.error("Failed admin submission update", error);
+    return serverError("Unable to update submission.");
+  }
+}
+
+async function deleteSubmission(
+  request: Request,
+  env: Env,
+  submissionId: number
+): Promise<Response> {
+  try {
+    const auth = await requireAdmin(request, env);
+
+    if (auth.response) {
+      return auth.response;
+    }
+
+    const deleted = await deleteAdminSubmission(
+      env,
+      submissionId,
+      auth.admin!.organizationId
+    );
+
+    if (!deleted) {
+      return notFound();
+    }
+
+    return json({
+      success: true,
+      data: {
+        deleted: true
+      }
+    });
+  } catch (error) {
+    console.error("Failed admin submission delete", error);
+    return serverError("Unable to delete submission.");
+  }
+}
+
 function parseSubmissionFilters(searchParams: URLSearchParams) {
+  const formId = normalizeOptionalPositiveInteger(searchParams.get("formId"));
   const status = normalizeOptionalString(searchParams.get("status"));
   const archived = normalizeOptionalBoolean(searchParams.get("archived"));
   const servingAreaId = normalizeOptionalPositiveInteger(searchParams.get("servingAreaId"));
   const search = normalizeOptionalString(searchParams.get("search"));
 
   return {
+    formId,
     status,
     archived,
     servingAreaId,

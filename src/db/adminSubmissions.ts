@@ -2,6 +2,8 @@ import type { Env } from "../types";
 
 export interface AdminSubmissionListItem {
   id: number;
+  formId: number;
+  formName: string;
   firstName: string;
   lastName: string;
   email: string | null;
@@ -21,6 +23,9 @@ export interface AdminSubmissionListItem {
 export interface AdminSubmissionDetail {
   submission: {
     id: number;
+    organizationId: number;
+    formId: number;
+    formName: string;
     firstName: string;
     lastName: string;
     email: string | null;
@@ -65,14 +70,22 @@ export interface AdminSubmissionDetail {
 
 export interface AdminSubmissionFilters {
   organizationId?: number;
+  formId?: number;
   status?: string;
   archived?: boolean;
   servingAreaId?: number;
   search?: string;
 }
 
+export interface UpdateAdminSubmissionInput {
+  status?: string;
+  isArchived?: boolean;
+}
+
 interface AdminSubmissionRow {
   id: number;
+  form_id: number;
+  form_name: string;
   first_name: string;
   last_name: string;
   email: string | null;
@@ -91,6 +104,9 @@ interface AdminSubmissionRow {
 
 interface AdminSubmissionDetailRow {
   id: number;
+  organization_id: number;
+  form_id: number;
+  form_name: string;
   first_name: string;
   last_name: string;
   email: string | null;
@@ -147,6 +163,11 @@ export async function listAdminSubmissions(
     bindings.push(filters.organizationId);
   }
 
+  if (filters.formId) {
+    conditions.push("vs.form_id = ?");
+    bindings.push(filters.formId);
+  }
+
   if (filters.status) {
     conditions.push("vs.status = ?");
     bindings.push(filters.status);
@@ -177,6 +198,8 @@ export async function listAdminSubmissions(
     `
     SELECT
       vs.id,
+      vs.form_id,
+      vf.name AS form_name,
       vs.first_name,
       vs.last_name,
       vs.email,
@@ -192,6 +215,8 @@ export async function listAdminSubmissions(
       MAX(sa.requires_background_check) AS requires_background_check,
       MAX(sa.requires_training) AS requires_training
     FROM volunteer_submissions vs
+    INNER JOIN volunteer_forms vf
+      ON vf.id = vs.form_id
     LEFT JOIN volunteer_interests vi
       ON vi.submission_id = vs.id
     LEFT JOIN serving_areas sa
@@ -220,6 +245,9 @@ export async function getAdminSubmissionDetail(
     `
     SELECT
       vs.id,
+      vs.organization_id,
+      vs.form_id,
+      vf.name AS form_name,
       vs.first_name,
       vs.last_name,
       vs.email,
@@ -235,6 +263,8 @@ export async function getAdminSubmissionDetail(
       vs.updated_at,
       GROUP_CONCAT(DISTINCT va.availability_key) AS availability
     FROM volunteer_submissions vs
+    INNER JOIN volunteer_forms vf
+      ON vf.id = vs.form_id
     LEFT JOIN volunteer_availability va
       ON va.submission_id = vs.id
     WHERE vs.id = ?${organizationClause}
@@ -262,6 +292,9 @@ export async function getAdminSubmissionDetail(
   return {
     submission: {
       id: submission.id,
+      organizationId: submission.organization_id,
+      formId: submission.form_id,
+      formName: submission.form_name,
       firstName: submission.first_name,
       lastName: submission.last_name,
       email: submission.email,
@@ -388,9 +421,86 @@ async function listAdminNotes(
   }));
 }
 
+export async function updateAdminSubmission(
+  env: Env,
+  submissionId: number,
+  organizationId: number,
+  input: UpdateAdminSubmissionInput
+): Promise<{ id: number; status: string; isArchived: boolean; updatedAt: string } | null> {
+  const existing = await env.DB.prepare(
+    `
+    SELECT id, status, is_archived
+    FROM volunteer_submissions
+    WHERE id = ? AND organization_id = ?
+    LIMIT 1
+    `
+  )
+    .bind(submissionId, organizationId)
+    .first<{ id: number; status: string; is_archived: number }>();
+
+  if (!existing) {
+    return null;
+  }
+
+  const status = input.status ?? existing.status;
+  const isArchived =
+    typeof input.isArchived === "boolean" ? input.isArchived : Boolean(existing.is_archived);
+
+  await env.DB.prepare(
+    `
+    UPDATE volunteer_submissions
+    SET status = ?, is_archived = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND organization_id = ?
+    `
+  )
+    .bind(status, isArchived ? 1 : 0, submissionId, organizationId)
+    .run();
+
+  const updated = await env.DB.prepare(
+    `
+    SELECT id, status, is_archived, updated_at
+    FROM volunteer_submissions
+    WHERE id = ? AND organization_id = ?
+    LIMIT 1
+    `
+  )
+    .bind(submissionId, organizationId)
+    .first<{ id: number; status: string; is_archived: number; updated_at: string }>();
+
+  if (!updated) {
+    return null;
+  }
+
+  return {
+    id: updated.id,
+    status: updated.status,
+    isArchived: Boolean(updated.is_archived),
+    updatedAt: updated.updated_at
+  };
+}
+
+export async function deleteAdminSubmission(
+  env: Env,
+  submissionId: number,
+  organizationId: number
+): Promise<boolean> {
+  const result = await env.DB.prepare(
+    `
+    DELETE FROM volunteer_submissions
+    WHERE id = ? AND organization_id = ?
+    `
+  )
+    .bind(submissionId, organizationId)
+    .run();
+
+  return (result.meta.changes ?? 0) > 0;
+}
+
 function mapAdminSubmissionListItem(row: AdminSubmissionRow): AdminSubmissionListItem {
   return {
     id: row.id,
+    formId: row.form_id,
+    formName: row.form_name,
     firstName: row.first_name,
     lastName: row.last_name,
     email: row.email,
