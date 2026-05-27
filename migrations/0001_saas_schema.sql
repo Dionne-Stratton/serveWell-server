@@ -1,17 +1,55 @@
-CREATE TABLE IF NOT EXISTS admin_users (
+-- ServeWell SaaS foundation schema (organization + form scoping)
+-- Apply on a fresh D1 database (reset local/remote before migrating if upgrading from prototype migrations).
+
+CREATE TABLE IF NOT EXISTS organizations (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  email TEXT NOT NULL UNIQUE,
-  password_hash TEXT NOT NULL,
-  display_name TEXT NOT NULL,
-  role TEXT NOT NULL DEFAULT 'admin',
+  slug TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  organization_type TEXT NOT NULL DEFAULT 'church',
+  contact_email TEXT,
+  website_url TEXT,
   is_active INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS volunteer_forms (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  organization_id INTEGER NOT NULL,
+  slug TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  intro_text TEXT,
+  success_message TEXT,
+  template_key TEXT NOT NULL DEFAULT 'church_volunteer_default',
+  is_default INTEGER NOT NULL DEFAULT 0,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  UNIQUE (organization_id, slug)
+);
+
+CREATE TABLE IF NOT EXISTS admin_users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  organization_id INTEGER NOT NULL,
+  email TEXT NOT NULL,
+  password_hash TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'admin',
+  is_active INTEGER NOT NULL DEFAULT 1,
+  last_login_at TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  UNIQUE (organization_id, email)
+);
+
 CREATE TABLE IF NOT EXISTS serving_areas (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  slug TEXT NOT NULL UNIQUE,
+  organization_id INTEGER NOT NULL,
+  form_id INTEGER NOT NULL,
+  slug TEXT NOT NULL,
   name TEXT NOT NULL,
   category TEXT NOT NULL,
   description TEXT,
@@ -22,11 +60,16 @@ CREATE TABLE IF NOT EXISTS serving_areas (
   is_active INTEGER NOT NULL DEFAULT 1,
   sort_order INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  FOREIGN KEY (form_id) REFERENCES volunteer_forms(id) ON DELETE CASCADE,
+  UNIQUE (form_id, slug)
 );
 
 CREATE TABLE IF NOT EXISTS serving_area_requirements (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  organization_id INTEGER NOT NULL,
+  form_id INTEGER NOT NULL,
   serving_area_id INTEGER NOT NULL,
   requirement_type TEXT NOT NULL,
   label TEXT NOT NULL,
@@ -39,11 +82,15 @@ CREATE TABLE IF NOT EXISTS serving_area_requirements (
   sort_order INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  FOREIGN KEY (form_id) REFERENCES volunteer_forms(id) ON DELETE CASCADE,
   FOREIGN KEY (serving_area_id) REFERENCES serving_areas(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS volunteer_submissions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  organization_id INTEGER NOT NULL,
+  form_id INTEGER NOT NULL,
   first_name TEXT NOT NULL,
   last_name TEXT NOT NULL,
   email TEXT,
@@ -58,11 +105,15 @@ CREATE TABLE IF NOT EXISTS volunteer_submissions (
   is_archived INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  CHECK (email IS NOT NULL OR phone IS NOT NULL)
+  CHECK (email IS NOT NULL OR phone IS NOT NULL),
+  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  FOREIGN KEY (form_id) REFERENCES volunteer_forms(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS volunteer_interests (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  organization_id INTEGER NOT NULL,
+  form_id INTEGER NOT NULL,
   submission_id INTEGER NOT NULL,
   serving_area_id INTEGER NOT NULL,
   uses_area_specific_frequency INTEGER NOT NULL DEFAULT 0,
@@ -71,26 +122,36 @@ CREATE TABLE IF NOT EXISTS volunteer_interests (
   experience_level TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  FOREIGN KEY (form_id) REFERENCES volunteer_forms(id) ON DELETE CASCADE,
   FOREIGN KEY (submission_id) REFERENCES volunteer_submissions(id) ON DELETE CASCADE,
   FOREIGN KEY (serving_area_id) REFERENCES serving_areas(id) ON DELETE RESTRICT
 );
 
 CREATE TABLE IF NOT EXISTS volunteer_availability (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  organization_id INTEGER NOT NULL,
+  form_id INTEGER NOT NULL,
   submission_id INTEGER NOT NULL,
   availability_key TEXT NOT NULL,
   label TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  FOREIGN KEY (form_id) REFERENCES volunteer_forms(id) ON DELETE CASCADE,
   FOREIGN KEY (submission_id) REFERENCES volunteer_submissions(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS volunteer_requirement_confirmations (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  organization_id INTEGER NOT NULL,
+  form_id INTEGER NOT NULL,
   submission_id INTEGER NOT NULL,
   serving_area_id INTEGER NOT NULL,
   requirement_id INTEGER NOT NULL,
   confirmed INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  FOREIGN KEY (form_id) REFERENCES volunteer_forms(id) ON DELETE CASCADE,
   FOREIGN KEY (submission_id) REFERENCES volunteer_submissions(id) ON DELETE CASCADE,
   FOREIGN KEY (serving_area_id) REFERENCES serving_areas(id) ON DELETE RESTRICT,
   FOREIGN KEY (requirement_id) REFERENCES serving_area_requirements(id) ON DELETE RESTRICT
@@ -98,23 +159,33 @@ CREATE TABLE IF NOT EXISTS volunteer_requirement_confirmations (
 
 CREATE TABLE IF NOT EXISTS admin_notes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  organization_id INTEGER NOT NULL,
+  form_id INTEGER NOT NULL,
   submission_id INTEGER NOT NULL,
   admin_user_id INTEGER NOT NULL,
   note TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  FOREIGN KEY (form_id) REFERENCES volunteer_forms(id) ON DELETE CASCADE,
   FOREIGN KEY (submission_id) REFERENCES volunteer_submissions(id) ON DELETE CASCADE,
   FOREIGN KEY (admin_user_id) REFERENCES admin_users(id) ON DELETE RESTRICT
 );
 
-CREATE INDEX IF NOT EXISTS idx_serving_areas_active_sort
-  ON serving_areas (is_active, sort_order);
+CREATE INDEX IF NOT EXISTS idx_volunteer_forms_org_default
+  ON volunteer_forms (organization_id, is_default, is_active);
 
-CREATE INDEX IF NOT EXISTS idx_requirements_serving_area
-  ON serving_area_requirements (serving_area_id, sort_order);
+CREATE INDEX IF NOT EXISTS idx_admin_users_org_active
+  ON admin_users (organization_id, is_active);
 
-CREATE INDEX IF NOT EXISTS idx_submissions_status_archived
-  ON volunteer_submissions (status, is_archived, created_at);
+CREATE INDEX IF NOT EXISTS idx_serving_areas_form_active_sort
+  ON serving_areas (form_id, is_active, sort_order);
+
+CREATE INDEX IF NOT EXISTS idx_requirements_form_area
+  ON serving_area_requirements (form_id, serving_area_id, sort_order);
+
+CREATE INDEX IF NOT EXISTS idx_submissions_org_form_status
+  ON volunteer_submissions (organization_id, form_id, status, is_archived, created_at);
 
 CREATE INDEX IF NOT EXISTS idx_interests_submission
   ON volunteer_interests (submission_id);
