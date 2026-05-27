@@ -79,6 +79,47 @@ export async function listServingAreas(env: Env): Promise<ServingArea[]> {
   return mapServingAreaRows(result.results ?? []);
 }
 
+export async function listServingAreasForForm(
+  env: Env,
+  organizationId: number,
+  formId: number
+): Promise<ServingArea[]> {
+  const result = await env.DB.prepare(
+    `
+    SELECT
+      sa.id,
+      sa.slug,
+      sa.name,
+      sa.category,
+      sa.description,
+      sa.public_note,
+      sa.requires_background_check,
+      sa.requires_training,
+      sa.requires_audition_or_interview,
+      sar.id AS requirement_id,
+      sar.requirement_type,
+      sar.label AS requirement_label,
+      sar.description AS requirement_description,
+      sar.day_of_week,
+      sar.start_time,
+      sar.end_time,
+      sar.is_mandatory,
+      sar.requires_confirmation
+    FROM serving_areas sa
+    LEFT JOIN serving_area_requirements sar
+      ON sar.serving_area_id = sa.id
+    WHERE sa.is_active = 1
+      AND sa.organization_id = ?
+      AND sa.form_id = ?
+    ORDER BY sa.sort_order ASC, sa.name ASC, sar.sort_order ASC, sar.id ASC
+    `
+  )
+    .bind(organizationId, formId)
+    .all<ServingAreaRow>();
+
+  return mapServingAreaRows(result.results ?? []);
+}
+
 function mapServingAreaRows(rows: ServingAreaRow[]): ServingArea[] {
   const servingAreas = new Map<number, ServingArea>();
 

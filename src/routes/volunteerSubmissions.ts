@@ -1,3 +1,5 @@
+import { resolveDemoVolunteerFormContext } from "../db/demoContext";
+import { defaultSubmissionSuccessMessage } from "../db/publicVolunteerForm";
 import { createVolunteerSubmission } from "../db/volunteerSubmissions";
 import { badRequest, json, methodNotAllowed, notFound, serverError } from "../http/responses";
 import type { Env } from "../types";
@@ -24,21 +26,30 @@ export async function volunteerSubmissionRoutes(
     }
 
     try {
-      const validation = await validateVolunteerSubmission(env, body);
+      const demoContext = await resolveDemoVolunteerFormContext(env);
+
+      if (!demoContext) {
+        return serverError("Demo volunteer form is not configured.");
+      }
+
+      const validation = await validateVolunteerSubmission(env, body, demoContext.scope);
 
       if (!validation.input) {
         return badRequest(validation.error ?? "Invalid volunteer submission.");
       }
 
-      const submissionId = await createVolunteerSubmission(env, validation.input);
+      const submissionId = await createVolunteerSubmission(
+        env,
+        validation.input,
+        demoContext.scope
+      );
 
       return json(
         {
           success: true,
           data: {
             submissionId,
-            message:
-              "Thank you! Your interest has been submitted. Someone from the church will follow up with you soon."
+            message: defaultSubmissionSuccessMessage(demoContext.form)
           }
         },
         { status: 201 }

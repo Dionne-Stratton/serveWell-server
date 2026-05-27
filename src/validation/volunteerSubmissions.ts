@@ -8,7 +8,8 @@ import {
 import type {
   CreateVolunteerSubmissionInput,
   RequirementConfirmationInput,
-  VolunteerInterestInput
+  VolunteerInterestInput,
+  VolunteerSubmissionScope
 } from "../db/volunteerSubmissions";
 import type { Env } from "../types";
 
@@ -30,7 +31,8 @@ interface ValidationResult {
 
 export async function validateVolunteerSubmission(
   env: Env,
-  body: unknown
+  body: unknown,
+  scope: VolunteerSubmissionScope
 ): Promise<ValidationResult> {
   if (!isRecord(body)) {
     return { error: "Request body must be a JSON object." };
@@ -85,6 +87,7 @@ export async function validateVolunteerSubmission(
 
   const servingAreaError = await validateServingAreaRules(
     env,
+    scope,
     interests,
     requirementConfirmations,
     availability
@@ -194,6 +197,7 @@ function normalizeRequirementConfirmations(value: unknown): RequirementConfirmat
 
 async function validateServingAreaRules(
   env: Env,
+  scope: VolunteerSubmissionScope,
   interests: VolunteerInterestInput[],
   requirementConfirmations: RequirementConfirmationInput[],
   availability: string[]
@@ -215,10 +219,12 @@ async function validateServingAreaRules(
     LEFT JOIN serving_area_requirements sar
       ON sar.serving_area_id = sa.id
     WHERE sa.is_active = 1
+      AND sa.organization_id = ?
+      AND sa.form_id = ?
       AND sa.id IN (${placeholders})
     `
   )
-    .bind(...servingAreaIds)
+    .bind(scope.organizationId, scope.formId, ...servingAreaIds)
     .all<RequirementRow>();
 
   const foundServingAreaIds = new Set(rows.results?.map((row) => row.serving_area_id) ?? []);

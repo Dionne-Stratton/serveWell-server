@@ -4,7 +4,7 @@ import type { Env } from "./types";
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    const preflight = handleCorsPreflight(request, env);
+    const preflight = handleCorsPreflight(request);
 
     if (preflight) {
       return preflight;
@@ -13,7 +13,7 @@ export default {
     const response = await routeRequest(request, env, ctx);
     const headers = new Headers(response.headers);
 
-    for (const [key, value] of Object.entries(corsHeaders(env))) {
+    for (const [key, value] of Object.entries(corsHeaders())) {
       headers.set(key, value);
     }
 

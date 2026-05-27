@@ -29,6 +29,11 @@ export interface CreateVolunteerSubmissionInput {
   requirementConfirmations: RequirementConfirmationInput[];
 }
 
+export interface VolunteerSubmissionScope {
+  organizationId: number;
+  formId: number;
+}
+
 interface InsertMeta {
   last_row_id?: number;
   lastRowId?: number;
@@ -36,11 +41,14 @@ interface InsertMeta {
 
 export async function createVolunteerSubmission(
   env: Env,
-  input: CreateVolunteerSubmissionInput
+  input: CreateVolunteerSubmissionInput,
+  scope: VolunteerSubmissionScope
 ): Promise<number> {
   const insertSubmission = await env.DB.prepare(
     `
     INSERT INTO volunteer_submissions (
+      organization_id,
+      form_id,
       first_name,
       last_name,
       email,
@@ -50,10 +58,12 @@ export async function createVolunteerSubmission(
       open_to_special_events,
       experience_notes,
       additional_notes
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
   )
     .bind(
+      scope.organizationId,
+      scope.formId,
       input.firstName,
       input.lastName,
       input.email,
@@ -78,15 +88,19 @@ export async function createVolunteerSubmission(
       env.DB.prepare(
         `
         INSERT INTO volunteer_interests (
+          organization_id,
+          form_id,
           submission_id,
           serving_area_id,
           uses_area_specific_frequency,
           area_specific_frequency,
           interest_notes,
           experience_level
-        ) VALUES (?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `
       ).bind(
+        scope.organizationId,
+        scope.formId,
         submissionId,
         interest.servingAreaId,
         interest.usesAreaSpecificFrequency ? 1 : 0,
@@ -99,24 +113,36 @@ export async function createVolunteerSubmission(
       env.DB.prepare(
         `
         INSERT INTO volunteer_availability (
+          organization_id,
+          form_id,
           submission_id,
           availability_key,
           label
-        ) VALUES (?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?)
         `
-      ).bind(submissionId, availabilityKey, availabilityLabel(availabilityKey))
+      ).bind(
+        scope.organizationId,
+        scope.formId,
+        submissionId,
+        availabilityKey,
+        availabilityLabel(availabilityKey)
+      )
     ),
     ...input.requirementConfirmations.map((confirmation) =>
       env.DB.prepare(
         `
         INSERT INTO volunteer_requirement_confirmations (
+          organization_id,
+          form_id,
           submission_id,
           serving_area_id,
           requirement_id,
           confirmed
-        ) VALUES (?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?)
         `
       ).bind(
+        scope.organizationId,
+        scope.formId,
         submissionId,
         confirmation.servingAreaId,
         confirmation.requirementId,
