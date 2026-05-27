@@ -64,6 +64,7 @@ export interface AdminSubmissionDetail {
 }
 
 export interface AdminSubmissionFilters {
+  organizationId?: number;
   status?: string;
   archived?: boolean;
   servingAreaId?: number;
@@ -141,6 +142,11 @@ export async function listAdminSubmissions(
   const conditions: string[] = [];
   const bindings: Array<string | number> = [];
 
+  if (filters.organizationId) {
+    conditions.push("vs.organization_id = ?");
+    bindings.push(filters.organizationId);
+  }
+
   if (filters.status) {
     conditions.push("vs.status = ?");
     bindings.push(filters.status);
@@ -205,8 +211,11 @@ export async function listAdminSubmissions(
 
 export async function getAdminSubmissionDetail(
   env: Env,
-  submissionId: number
+  submissionId: number,
+  organizationId?: number
 ): Promise<AdminSubmissionDetail | null> {
+  const organizationClause =
+    typeof organizationId === "number" ? " AND vs.organization_id = ?" : "";
   const submission = await env.DB.prepare(
     `
     SELECT
@@ -228,12 +237,16 @@ export async function getAdminSubmissionDetail(
     FROM volunteer_submissions vs
     LEFT JOIN volunteer_availability va
       ON va.submission_id = vs.id
-    WHERE vs.id = ?
+    WHERE vs.id = ?${organizationClause}
     GROUP BY vs.id
     LIMIT 1
     `
   )
-    .bind(submissionId)
+    .bind(
+      ...(typeof organizationId === "number"
+        ? [submissionId, organizationId]
+        : [submissionId])
+    )
     .first<AdminSubmissionDetailRow>();
 
   if (!submission) {

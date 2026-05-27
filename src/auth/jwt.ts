@@ -12,6 +12,7 @@ interface JwtHeader {
 
 interface AdminJwtPayload {
   sub: string;
+  organizationId: number;
   email: string;
   displayName: string;
   role: "admin";
@@ -23,6 +24,7 @@ export async function signAdminJwt(admin: AdminUser, env: Env): Promise<string> 
   const issuedAt = Math.floor(Date.now() / 1000);
   const payload: AdminJwtPayload = {
     sub: String(admin.id),
+    organizationId: admin.organizationId,
     email: admin.email,
     displayName: admin.displayName,
     role: admin.role,
@@ -68,8 +70,13 @@ export async function verifyAdminJwt(token: string, env: Env): Promise<AdminUser
     return null;
   }
 
+  if (!Number.isInteger(payload.organizationId) || payload.organizationId <= 0) {
+    return null;
+  }
+
   return {
     id,
+    organizationId: payload.organizationId,
     email: payload.email,
     displayName: payload.displayName,
     role: payload.role

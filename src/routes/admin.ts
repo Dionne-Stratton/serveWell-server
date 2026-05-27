@@ -2,6 +2,7 @@ import { requireAdmin } from "../auth/adminGuard";
 import { signAdminJwt } from "../auth/jwt";
 import { verifyPassword } from "../auth/passwords";
 import { findActiveAdminByEmail } from "../db/adminUsers";
+import { findActiveOrganizationById, mapPublicOrganization } from "../db/organizations";
 import { getAdminSubmissionDetail, listAdminSubmissions } from "../db/adminSubmissions";
 import { badRequest, json, methodNotAllowed, notFound, serverError, unauthorized } from "../http/responses";
 import type { Env } from "../types";
@@ -87,13 +88,20 @@ async function login(request: Request, env: Env): Promise<Response> {
     }
 
     const { passwordHash: _passwordHash, ...safeAdmin } = admin;
+    const organization = await findActiveOrganizationById(env, safeAdmin.organizationId);
+
+    if (!organization) {
+      return serverError("Admin organization is not available.");
+    }
+
     const token = await signAdminJwt(safeAdmin, env);
 
     return json({
       success: true,
       data: {
         token,
-        admin: safeAdmin
+        admin: safeAdmin,
+        organization: mapPublicOrganization(organization)
       }
     });
   } catch (error) {
@@ -110,10 +118,17 @@ async function me(request: Request, env: Env): Promise<Response> {
       return auth.response;
     }
 
+    const organization = await findActiveOrganizationById(env, auth.admin!.organizationId);
+
+    if (!organization) {
+      return serverError("Admin organization is not available.");
+    }
+
     return json({
       success: true,
       data: {
-        admin: auth.admin
+        admin: auth.admin,
+        organization: mapPublicOrganization(organization)
       }
     });
   } catch (error) {
@@ -131,7 +146,10 @@ async function submissions(request: Request, env: Env): Promise<Response> {
     }
 
     const url = new URL(request.url);
-    const filters = parseSubmissionFilters(url.searchParams);
+    const filters = {
+      ...parseSubmissionFilters(url.searchParams),
+      organizationId: auth.admin!.organizationId
+    };
     const submissions = await listAdminSubmissions(env, filters);
 
     return json({
@@ -158,7 +176,11 @@ async function submissionDetail(
       return auth.response;
     }
 
-    const detail = await getAdminSubmissionDetail(env, submissionId);
+    const detail = await getAdminSubmissionDetail(
+      env,
+      submissionId,
+      auth.admin!.organizationId
+    );
 
     if (!detail) {
       return notFound();

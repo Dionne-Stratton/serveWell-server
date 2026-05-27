@@ -16,6 +16,7 @@ export interface ApiResponseBody<T = unknown> {
 
 export interface AdminUser {
   id: number;
+  organizationId: number;
   email: string;
   displayName: string;
   role: "admin";

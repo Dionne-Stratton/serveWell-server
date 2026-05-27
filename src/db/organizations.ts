@@ -42,6 +42,23 @@ export interface VolunteerForm {
   isActive: boolean;
 }
 
+export async function findActiveOrganizationById(
+  env: Env,
+  id: number
+): Promise<Organization | null> {
+  const row = await env.DB.prepare(
+    `
+    SELECT id, slug, name, organization_type, website_url
+    FROM organizations
+    WHERE id = ? AND is_active = 1
+  `
+  )
+    .bind(id)
+    .first<OrganizationRow>();
+
+  return row ? mapOrganization(row) : null;
+}
+
 export async function findActiveOrganizationBySlug(
   env: Env,
   slug: string
