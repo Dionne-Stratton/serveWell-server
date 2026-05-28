@@ -5,6 +5,7 @@ import {
 } from "../db/organizations";
 import { buildPublicVolunteerFormPayload, defaultSubmissionSuccessMessage } from "../db/publicVolunteerForm";
 import { createVolunteerSubmission } from "../db/volunteerSubmissions";
+import { DEMO_ORGANIZATION_SLUG } from "../constants/demo";
 import { badRequest, json, methodNotAllowed, serverError } from "../http/responses";
 import type { Env } from "../types";
 import { validateVolunteerSubmission } from "../validation/volunteerSubmissions";
@@ -162,6 +163,13 @@ async function createSubmissionForForm(
   organization: NonNullable<Awaited<ReturnType<typeof findActiveOrganizationBySlug>>>,
   form: NonNullable<Awaited<ReturnType<typeof findActiveVolunteerFormBySlug>>>
 ): Promise<Response> {
+  if (organization.slug === DEMO_ORGANIZATION_SLUG) {
+    return badRequest(
+      "The public demo form does not accept submissions. Use your own organization trial to submit real responses.",
+      "DEMO_SUBMISSIONS_DISABLED"
+    );
+  }
+
   let body: unknown;
 
   try {
