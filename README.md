@@ -116,6 +116,8 @@ Legacy global routes (`GET /api/serving-areas`, `POST /api/volunteer-submissions
 | `GET` | `/api/admin/submissions/:id` | Detail; must belong to admin’s org |
 | `PATCH` | `/api/admin/submissions/:id` | Update admin fields (e.g. status, archive) |
 | `DELETE` | `/api/admin/submissions/:id` | Delete submission in org (demo/test cleanup) |
+| `POST` | `/api/admin/submissions/:id/notes` | Add staff-only note to a submission |
+| `DELETE` | `/api/admin/notes/:noteId` | Delete a note in the authenticated admin’s org |
 
 Login and `/api/admin/me` include `organizationId` on the admin object and a public `organization` object (`slug`, `name`, etc.).
 

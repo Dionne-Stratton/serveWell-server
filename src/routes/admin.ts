@@ -9,6 +9,11 @@ import {
   listAdminSubmissions,
   updateAdminSubmission
 } from "../db/adminSubmissions";
+import {
+  createAdminNote,
+  deleteAdminNote,
+  validateAdminNoteText
+} from "../db/adminNotes";
 import { badRequest, json, methodNotAllowed, notFound, serverError, unauthorized } from "../http/responses";
 import type { Env } from "../types";
 import { isOneOf, submissionStatuses } from "../validation/enums";
@@ -42,6 +47,32 @@ export async function adminRoutes(
     }
 
     return submissions(request, env);
+  }
+
+  const submissionNotesMatch = url.pathname.match(
+    /^\/api\/admin\/submissions\/(\d+)\/notes$/
+  );
+
+  if (submissionNotesMatch) {
+    const submissionId = Number(submissionNotesMatch[1]);
+
+    if (request.method === "POST") {
+      return postSubmissionNote(request, env, submissionId);
+    }
+
+    return methodNotAllowed();
+  }
+
+  const adminNoteMatch = url.pathname.match(/^\/api\/admin\/notes\/(\d+)$/);
+
+  if (adminNoteMatch) {
+    const noteId = Number(adminNoteMatch[1]);
+
+    if (request.method === "DELETE") {
+      return deleteNote(request, env, noteId);
+    }
+
+    return methodNotAllowed();
   }
 
   const submissionDetailMatch = url.pathname.match(/^\/api\/admin\/submissions\/(\d+)$/);
@@ -278,6 +309,89 @@ async function patchSubmission(
   } catch (error) {
     console.error("Failed admin submission update", error);
     return serverError("Unable to update submission.");
+  }
+}
+
+async function postSubmissionNote(
+  request: Request,
+  env: Env,
+  submissionId: number
+): Promise<Response> {
+  try {
+    const auth = await requireAdmin(request, env);
+
+    if (auth.response) {
+      return auth.response;
+    }
+
+    let body: unknown;
+
+    try {
+      body = await request.json();
+    } catch {
+      return badRequest("Request body must be valid JSON.", "INVALID_JSON");
+    }
+
+    if (!isRecord(body)) {
+      return badRequest("Request body must be a JSON object.");
+    }
+
+    const noteText = validateAdminNoteText(body.note);
+
+    if (!noteText) {
+      return badRequest("Note must be a non-empty string.", "INVALID_NOTE");
+    }
+
+    const note = await createAdminNote(
+      env,
+      submissionId,
+      auth.admin!.organizationId,
+      auth.admin!.id,
+      noteText
+    );
+
+    if (!note) {
+      return notFound();
+    }
+
+    return json(
+      {
+        success: true,
+        data: {
+          note
+        }
+      },
+      { status: 201 }
+    );
+  } catch (error) {
+    console.error("Failed to create admin note", error);
+    return serverError("Unable to add note.");
+  }
+}
+
+async function deleteNote(request: Request, env: Env, noteId: number): Promise<Response> {
+  try {
+    const auth = await requireAdmin(request, env);
+
+    if (auth.response) {
+      return auth.response;
+    }
+
+    const deleted = await deleteAdminNote(env, noteId, auth.admin!.organizationId);
+
+    if (!deleted) {
+      return notFound();
+    }
+
+    return json({
+      success: true,
+      data: {
+        deleted: true
+      }
+    });
+  } catch (error) {
+    console.error("Failed to delete admin note", error);
+    return serverError("Unable to delete note.");
   }
 }
 
