@@ -30,6 +30,20 @@ export async function verifyPassword(password: string, storedHash: string): Prom
   return false;
 }
 
+const PBKDF2_ITERATIONS = 210_000;
+
+export async function hashPassword(password: string): Promise<string> {
+  const salt = randomSalt();
+  const hash = await pbkdf2Sha256(password, salt, PBKDF2_ITERATIONS);
+  return `pbkdf2_sha256$${PBKDF2_ITERATIONS}$${salt}$${hash}`;
+}
+
+function randomSalt(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return base64EncodeBytes(bytes).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
 async function sha256(value: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
 
