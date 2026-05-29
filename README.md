@@ -124,7 +124,7 @@ Login and `/api/admin/me` include `organizationId` on the admin object and a pub
 
 ### Church signup (public)
 
-Creates an **organization profile** and the **first admin user**. Does **not** create a volunteer form yet (that comes in a later step).
+Creates an **organization profile**, the **first admin user**, and a **default volunteer form** (`general-serving`) with serving areas and requirements from the `church_volunteer_default` template (same baseline as the demo form).
 
 | Method | Path | Notes |
 |--------|------|--------|
@@ -162,7 +162,7 @@ Load the demo volunteer form (default form):
 curl -s "http://127.0.0.1:8787/api/organizations/demo/volunteer-form"
 ```
 
-Register a new church (organization + admin only; no volunteer form yet):
+Register a new church (organization, admin, and default volunteer form):
 
 ```sh
 curl -s -X POST "http://127.0.0.1:8787/api/auth/register" \

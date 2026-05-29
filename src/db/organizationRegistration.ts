@@ -1,4 +1,5 @@
 import { hashPassword } from "../auth/passwords";
+import { provisionChurchVolunteerDefaultForm } from "./provisionDefaultForm";
 import type { OrganizationRegistrationInput } from "../validation/organizationRegistration";
 import type { Env } from "../types";
 
@@ -99,6 +100,12 @@ export async function createOrganizationWithAdmin(
   if (!adminId) {
     throw new Error("Admin user insert did not return an id.");
   }
+
+  if (!organizationId) {
+    throw new Error("Organization insert did not return an id.");
+  }
+
+  await provisionChurchVolunteerDefaultForm(env, organizationId);
 
   return {
     ok: true,
