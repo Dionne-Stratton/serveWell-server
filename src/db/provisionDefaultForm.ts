@@ -4,6 +4,8 @@ import {
   CHURCH_VOLUNTEER_DEFAULT_SERVING_AREAS,
   type ProvisionedDefaultForm
 } from "../templates/churchVolunteerDefault";
+import { sectionTitleForCategory } from "../constants/categorySectionTitles";
+import { createFormSection } from "./formSections";
 import type { Env } from "../types";
 
 export async function provisionChurchVolunteerDefaultForm(
@@ -45,13 +47,29 @@ export async function provisionChurchVolunteerDefaultForm(
   }
 
   const areaIdBySlug = new Map<string, number>();
+  const sectionIdByCategory = new Map<string, number>();
 
   for (const area of CHURCH_VOLUNTEER_DEFAULT_SERVING_AREAS) {
+    if (!sectionIdByCategory.has(area.category)) {
+      const { title, sortOrder } = sectionTitleForCategory(area.category);
+      const section = await createFormSection(
+        env,
+        organizationId,
+        formId,
+        title,
+        sortOrder
+      );
+      sectionIdByCategory.set(area.category, section.id);
+    }
+
+    const sectionId = sectionIdByCategory.get(area.category)!;
+
     const areaInsert = await env.DB.prepare(
       `
       INSERT INTO serving_areas (
         organization_id,
         form_id,
+        section_id,
         slug,
         name,
         category,
@@ -62,12 +80,13 @@ export async function provisionChurchVolunteerDefaultForm(
         requires_audition_or_interview,
         sort_order,
         is_active
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
       `
     )
       .bind(
         organizationId,
         formId,
+        sectionId,
         area.slug,
         area.name,
         area.category,

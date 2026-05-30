@@ -325,21 +325,21 @@ async function listSubmissionInterests(
     SELECT
       vi.id,
       vi.serving_area_id,
-      sa.name AS serving_area_name,
+      COALESCE(vi.serving_area_name, sa.name) AS serving_area_name,
       vi.uses_area_specific_frequency,
       vi.area_specific_frequency,
       vs.overall_frequency,
-      sa.requires_background_check,
-      sa.requires_training,
+      COALESCE(sa.requires_background_check, 0) AS requires_background_check,
+      COALESCE(sa.requires_training, 0) AS requires_training,
       vi.experience_level,
       vi.interest_notes
     FROM volunteer_interests vi
     INNER JOIN volunteer_submissions vs
       ON vs.id = vi.submission_id
-    INNER JOIN serving_areas sa
+    LEFT JOIN serving_areas sa
       ON sa.id = vi.serving_area_id
     WHERE vi.submission_id = ?
-    ORDER BY sa.sort_order ASC, sa.name ASC
+    ORDER BY sa.sort_order ASC, serving_area_name ASC
     `
   )
     .bind(submissionId)

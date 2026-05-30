@@ -76,6 +76,34 @@ export async function findActiveOrganizationBySlug(
   return row ? mapOrganization(row) : null;
 }
 
+export async function findVolunteerFormBySlug(
+  env: Env,
+  organizationId: number,
+  formSlug: string
+): Promise<VolunteerForm | null> {
+  const row = await env.DB.prepare(
+    `
+    SELECT
+      id,
+      organization_id,
+      slug,
+      name,
+      description,
+      intro_text,
+      success_message,
+      template_key,
+      is_default,
+      is_active
+    FROM volunteer_forms
+    WHERE organization_id = ? AND slug = ?
+  `
+  )
+    .bind(organizationId, formSlug)
+    .first<VolunteerFormRow>();
+
+  return row ? mapVolunteerForm(row) : null;
+}
+
 export async function findActiveVolunteerFormBySlug(
   env: Env,
   organizationId: number,
@@ -173,6 +201,7 @@ export function mapPublicForm(form: VolunteerForm) {
     name: form.name,
     description: form.description,
     introText: form.introText,
-    successMessage: form.successMessage
+    successMessage: form.successMessage,
+    isActive: form.isActive
   };
 }

@@ -83,6 +83,11 @@ export async function createVolunteerSubmission(
     throw new Error("D1 did not return a submission id.");
   }
 
+  const areaNameById = await loadServingAreaNames(
+    env,
+    input.interests.map((interest) => interest.servingAreaId)
+  );
+
   const relatedStatements = [
     ...input.interests.map((interest) =>
       env.DB.prepare(
@@ -92,17 +97,19 @@ export async function createVolunteerSubmission(
           form_id,
           submission_id,
           serving_area_id,
+          serving_area_name,
           uses_area_specific_frequency,
           area_specific_frequency,
           interest_notes,
           experience_level
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `
       ).bind(
         scope.organizationId,
         scope.formId,
         submissionId,
         interest.servingAreaId,
+        areaNameById.get(interest.servingAreaId) ?? null,
         interest.usesAreaSpecificFrequency ? 1 : 0,
         interest.areaSpecificFrequency,
         interest.interestNotes,
@@ -156,6 +163,31 @@ export async function createVolunteerSubmission(
   }
 
   return submissionId;
+}
+
+async function loadServingAreaNames(
+  env: Env,
+  servingAreaIds: number[]
+): Promise<Map<number, string>> {
+  const map = new Map<number, string>();
+  const uniqueIds = [...new Set(servingAreaIds)];
+
+  if (uniqueIds.length === 0) {
+    return map;
+  }
+
+  const placeholders = uniqueIds.map(() => "?").join(", ");
+  const result = await env.DB.prepare(
+    `SELECT id, name FROM serving_areas WHERE id IN (${placeholders})`
+  )
+    .bind(...uniqueIds)
+    .all<{ id: number; name: string }>();
+
+  for (const row of result.results ?? []) {
+    map.set(row.id, row.name);
+  }
+
+  return map;
 }
 
 function availabilityLabel(availabilityKey: string): string {

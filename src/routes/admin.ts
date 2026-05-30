@@ -12,6 +12,10 @@ import {
   validateUpdateAdminFormInput
 } from "../db/adminForms";
 import {
+  buildAdminFormDetailResponse,
+  tryAdminFormManagementRoute
+} from "./adminFormManagement";
+import {
   deleteAdminSubmission,
   getAdminSubmissionDetail,
   listAdminSubmissions,
@@ -63,6 +67,16 @@ export async function adminRoutes(
     }
 
     return listForms(request, env);
+  }
+
+  const formManagementResponse = await tryAdminFormManagementRoute(
+    request,
+    env,
+    url.pathname
+  );
+
+  if (formManagementResponse) {
+    return formManagementResponse;
   }
 
   const adminFormMatch = url.pathname.match(/^\/api\/admin\/forms\/(\d+)$/);
@@ -273,18 +287,7 @@ async function getForm(request: Request, env: Env, formId: number): Promise<Resp
       return auth.response;
     }
 
-    const form = await getAdminFormById(env, formId, auth.admin!.organizationId);
-
-    if (!form) {
-      return notFound();
-    }
-
-    return json({
-      success: true,
-      data: {
-        form: mapAdminForm(form)
-      }
-    });
+    return buildAdminFormDetailResponse(env, formId, auth.admin!.organizationId);
   } catch (error) {
     console.error("Failed admin form lookup", error);
     return serverError("Unable to load form.");

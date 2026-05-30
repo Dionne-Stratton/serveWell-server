@@ -4,7 +4,7 @@ import {
   type Organization,
   type VolunteerForm
 } from "./organizations";
-import { listServingAreasForForm } from "./servingAreas";
+import { buildPublicFormSections, flattenPublicSections } from "./publicFormSections";
 import type { Env } from "../types";
 
 export async function buildPublicVolunteerFormPayload(
@@ -12,11 +12,16 @@ export async function buildPublicVolunteerFormPayload(
   organization: Organization,
   form: VolunteerForm
 ) {
-  const servingAreas = await listServingAreasForForm(env, organization.id, form.id);
+  const sections = await buildPublicFormSections(env, organization.id, form.id);
+  const servingAreas = flattenPublicSections(sections);
 
   return {
     organization: mapPublicOrganization(organization),
-    form: mapPublicForm(form),
+    form: {
+      ...mapPublicForm(form),
+      isActive: form.isActive
+    },
+    sections,
     servingAreas
   };
 }

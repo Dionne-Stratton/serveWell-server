@@ -1,7 +1,8 @@
 import {
   findActiveOrganizationBySlug,
   findActiveVolunteerFormBySlug,
-  findDefaultActiveVolunteerForm
+  findDefaultActiveVolunteerForm,
+  findVolunteerFormBySlug
 } from "../db/organizations";
 import { buildPublicVolunteerFormPayload, defaultSubmissionSuccessMessage } from "../db/publicVolunteerForm";
 import { createVolunteerSubmission } from "../db/volunteerSubmissions";
@@ -161,12 +162,19 @@ async function createSubmissionForForm(
   env: Env,
   request: Request,
   organization: NonNullable<Awaited<ReturnType<typeof findActiveOrganizationBySlug>>>,
-  form: NonNullable<Awaited<ReturnType<typeof findActiveVolunteerFormBySlug>>>
+  form: NonNullable<Awaited<ReturnType<typeof findVolunteerFormBySlug>>>
 ): Promise<Response> {
   if (organization.slug === DEMO_ORGANIZATION_SLUG) {
     return badRequest(
       "The public demo form does not accept submissions. Use your own organization trial to submit real responses.",
       "DEMO_SUBMISSIONS_DISABLED"
+    );
+  }
+
+  if (!form.isActive) {
+    return badRequest(
+      "This form is not currently accepting submissions.",
+      "FORM_INACTIVE"
     );
   }
 
@@ -211,7 +219,7 @@ async function resolveOrganizationForm(
   formSlug: string
 ): Promise<{
   organization?: NonNullable<Awaited<ReturnType<typeof findActiveOrganizationBySlug>>>;
-  form?: NonNullable<Awaited<ReturnType<typeof findActiveVolunteerFormBySlug>>>;
+  form?: NonNullable<Awaited<ReturnType<typeof findVolunteerFormBySlug>>>;
   response?: Response;
 }> {
   const organization = await findActiveOrganizationBySlug(env, organizationSlug);
@@ -222,7 +230,7 @@ async function resolveOrganizationForm(
 
   const resolvedFormSlug = formSlug === "default" ? null : formSlug;
   const form = resolvedFormSlug
-    ? await findActiveVolunteerFormBySlug(env, organization.id, resolvedFormSlug)
+    ? await findVolunteerFormBySlug(env, organization.id, resolvedFormSlug)
     : await findDefaultActiveVolunteerForm(env, organization.id);
 
   if (!form) {
