@@ -29,6 +29,8 @@ interface ValidationResult {
   error?: string;
 }
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export async function validateVolunteerSubmission(
   env: Env,
   body: unknown,
@@ -40,14 +42,18 @@ export async function validateVolunteerSubmission(
 
   const firstName = normalizeRequiredString(body.firstName);
   const lastName = normalizeRequiredString(body.lastName);
-  const email = normalizeOptionalString(body.email);
-  const phone = normalizeOptionalString(body.phone);
+  const email = normalizeRequiredString(body.email);
+  const phone = normalizeRequiredString(body.phone);
   const preferredContactMethod = body.preferredContactMethod;
   const overallFrequency = body.overallFrequency;
 
   if (!firstName) return { error: "First name is required." };
   if (!lastName) return { error: "Last name is required." };
-  if (!email && !phone) return { error: "Please provide an email address or phone number." };
+  if (!email) return { error: "Email is required." };
+  if (!EMAIL_PATTERN.test(email)) {
+    return { error: "Please enter a valid email address." };
+  }
+  if (!phone) return { error: "Phone number is required." };
 
   if (!isOneOf(preferredContactMethod, preferredContactMethods)) {
     return { error: "Preferred contact method is required." };

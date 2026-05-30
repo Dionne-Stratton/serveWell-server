@@ -5,10 +5,12 @@ import { findActiveAdminByEmail } from "../db/adminUsers";
 import { findActiveOrganizationById, mapPublicOrganization } from "../db/organizations";
 import { DEMO_ORGANIZATION_SLUG } from "../constants/demo";
 import {
+  createAdminVolunteerForm,
   getAdminFormById,
   listAdminForms,
   mapAdminForm,
   updateAdminForm,
+  validateCreateAdminFormInput,
   validateUpdateAdminFormInput
 } from "../db/adminForms";
 import {
@@ -62,11 +64,15 @@ export async function adminRoutes(
   }
 
   if (url.pathname === "/api/admin/forms") {
-    if (request.method !== "GET") {
-      return methodNotAllowed();
+    if (request.method === "GET") {
+      return listForms(request, env);
     }
 
-    return listForms(request, env);
+    if (request.method === "POST") {
+      return postForm(request, env);
+    }
+
+    return methodNotAllowed();
   }
 
   const formManagementResponse = await tryAdminFormManagementRoute(
@@ -276,6 +282,68 @@ async function listForms(request: Request, env: Env): Promise<Response> {
   } catch (error) {
     console.error("Failed admin forms lookup", error);
     return serverError("Unable to load forms.");
+  }
+}
+
+async function postForm(request: Request, env: Env): Promise<Response> {
+  try {
+    const auth = await requireAdmin(request, env);
+
+    if (auth.response) {
+      return auth.response;
+    }
+
+    const organization = await findActiveOrganizationById(env, auth.admin!.organizationId);
+
+    if (!organization) {
+      return serverError("Admin organization is not available.");
+    }
+
+    if (organization.slug === DEMO_ORGANIZATION_SLUG) {
+      return badRequest(
+        "The demo organization cannot create forms.",
+        "DEMO_FORM_READ_ONLY"
+      );
+    }
+
+    let body: unknown;
+
+    try {
+      body = await request.json();
+    } catch {
+      return badRequest("Request body must be valid JSON.", "INVALID_JSON");
+    }
+
+    if (!isRecord(body)) {
+      return badRequest("Request body must be a JSON object.");
+    }
+
+    const validation = validateCreateAdminFormInput(body);
+
+    if (!validation.ok) {
+      return badRequest(validation.message);
+    }
+
+    const created = await createAdminVolunteerForm(
+      env,
+      auth.admin!.organizationId,
+      validation.value
+    );
+
+    if (created === "SLUG_IN_USE") {
+      return badRequest("That URL slug is already used on another form.", "SLUG_IN_USE");
+    }
+
+    return json(
+      {
+        success: true,
+        data: { form: mapAdminForm(created) }
+      },
+      { status: 201 }
+    );
+  } catch (error) {
+    console.error("Failed admin form create", error);
+    return serverError("Unable to create form.");
   }
 }
 

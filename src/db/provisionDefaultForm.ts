@@ -2,50 +2,18 @@ import {
   CHURCH_VOLUNTEER_DEFAULT_FORM,
   CHURCH_VOLUNTEER_DEFAULT_REQUIREMENTS,
   CHURCH_VOLUNTEER_DEFAULT_SERVING_AREAS,
+  CHURCH_VOLUNTEER_DEFAULT_TEMPLATE_KEY,
   type ProvisionedDefaultForm
 } from "../templates/churchVolunteerDefault";
 import { sectionTitleForCategory } from "../constants/categorySectionTitles";
 import { createFormSection } from "./formSections";
 import type { Env } from "../types";
 
-export async function provisionChurchVolunteerDefaultForm(
+export async function provisionChurchVolunteerDefaultStructure(
   env: Env,
-  organizationId: number
-): Promise<ProvisionedDefaultForm> {
-  const form = CHURCH_VOLUNTEER_DEFAULT_FORM;
-
-  const formInsert = await env.DB.prepare(
-    `
-    INSERT INTO volunteer_forms (
-      organization_id,
-      slug,
-      name,
-      description,
-      intro_text,
-      success_message,
-      template_key,
-      is_default,
-      is_active
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1)
-    `
-  )
-    .bind(
-      organizationId,
-      form.slug,
-      form.name,
-      form.description,
-      form.introText,
-      form.successMessage,
-      form.templateKey
-    )
-    .run();
-
-  const formId = formInsert.meta.last_row_id;
-
-  if (!formId) {
-    throw new Error("Default volunteer form insert did not return an id.");
-  }
-
+  organizationId: number,
+  formId: number
+): Promise<void> {
   const areaIdBySlug = new Map<string, number>();
   const sectionIdByCategory = new Map<string, number>();
 
@@ -151,6 +119,47 @@ export async function provisionChurchVolunteerDefaultForm(
       )
       .run();
   }
+}
+
+export async function provisionChurchVolunteerDefaultForm(
+  env: Env,
+  organizationId: number
+): Promise<ProvisionedDefaultForm> {
+  const form = CHURCH_VOLUNTEER_DEFAULT_FORM;
+
+  const formInsert = await env.DB.prepare(
+    `
+    INSERT INTO volunteer_forms (
+      organization_id,
+      slug,
+      name,
+      description,
+      intro_text,
+      success_message,
+      template_key,
+      is_default,
+      is_active
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1)
+    `
+  )
+    .bind(
+      organizationId,
+      form.slug,
+      form.name,
+      form.description,
+      form.introText,
+      form.successMessage,
+      form.templateKey
+    )
+    .run();
+
+  const formId = formInsert.meta.last_row_id;
+
+  if (!formId) {
+    throw new Error("Default volunteer form insert did not return an id.");
+  }
+
+  await provisionChurchVolunteerDefaultStructure(env, organizationId, formId);
 
   return { formId, formSlug: form.slug };
 }

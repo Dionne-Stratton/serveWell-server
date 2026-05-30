@@ -1,7 +1,14 @@
 import type { Env } from "../types";
+import {
+  CHURCH_VOLUNTEER_DEFAULT_FORM,
+  CHURCH_VOLUNTEER_DEFAULT_TEMPLATE_KEY
+} from "../templates/churchVolunteerDefault";
+import { provisionChurchVolunteerDefaultStructure } from "./provisionDefaultForm";
 
 const MAX_FORM_TEXT = 4000;
 const MAX_FORM_NAME = 120;
+const MAX_FORM_SLUG = 80;
+export const ADMIN_FORM_BLANK_TEMPLATE_KEY = "blank";
 
 export type AdminFormRecord = {
   id: number;
@@ -39,6 +46,15 @@ export type UpdateAdminFormInput = {
   introText?: string | null;
   successMessage?: string | null;
   isActive?: boolean;
+};
+
+export type CreateAdminFormInput = {
+  name: string;
+  slug: string;
+  description?: string | null;
+  introText?: string | null;
+  successMessage?: string | null;
+  templateKey?: string;
 };
 
 function mapFormRow(row: FormRow): AdminFormRecord {
@@ -206,6 +222,174 @@ export function validateUpdateAdminFormInput(
   }
 
   return { ok: true, value };
+}
+
+export function validateCreateAdminFormInput(
+  body: Record<string, unknown>
+): { ok: true; value: CreateAdminFormInput } | { ok: false; message: string } {
+  if (typeof body.name !== "string" || !body.name.trim()) {
+    return { ok: false, message: "Form name is required." };
+  }
+
+  if (body.name.trim().length > MAX_FORM_NAME) {
+    return { ok: false, message: "Form name is too long." };
+  }
+
+  if (typeof body.slug !== "string" || !body.slug.trim()) {
+    return { ok: false, message: "Form URL slug is required." };
+  }
+
+  const slug = body.slug.trim().toLowerCase();
+
+  if (slug.length > MAX_FORM_SLUG) {
+    return { ok: false, message: "Form URL slug is too long." };
+  }
+
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+    return {
+      ok: false,
+      message: "Slug must use lowercase letters, numbers, and hyphens."
+    };
+  }
+
+  let templateKey = CHURCH_VOLUNTEER_DEFAULT_TEMPLATE_KEY;
+
+  if (body.templateKey !== undefined) {
+    if (typeof body.templateKey !== "string" || !body.templateKey.trim()) {
+      return { ok: false, message: "templateKey must be a non-empty string." };
+    }
+    templateKey = body.templateKey.trim();
+    if (
+      templateKey !== CHURCH_VOLUNTEER_DEFAULT_TEMPLATE_KEY &&
+      templateKey !== ADMIN_FORM_BLANK_TEMPLATE_KEY
+    ) {
+      return { ok: false, message: "Unsupported form template." };
+    }
+  }
+
+  const defaults = CHURCH_VOLUNTEER_DEFAULT_FORM;
+
+  const normalizeOptional = (value: unknown): string | null | undefined => {
+    if (value === undefined) {
+      return undefined;
+    }
+    if (value === null) {
+      return null;
+    }
+    if (typeof value !== "string") {
+      return undefined;
+    }
+    const trimmed = value.trim();
+    return trimmed || null;
+  };
+
+  const description = normalizeOptional(body.description);
+  if (typeof description === "string" && description.length > MAX_FORM_TEXT) {
+    return { ok: false, message: "Description is too long." };
+  }
+
+  const introText = normalizeOptional(body.introText);
+  if (typeof introText === "string" && introText.length > MAX_FORM_TEXT) {
+    return { ok: false, message: "Intro text is too long." };
+  }
+
+  const successMessage = normalizeOptional(body.successMessage);
+  if (typeof successMessage === "string" && successMessage.length > MAX_FORM_TEXT) {
+    return { ok: false, message: "Success message is too long." };
+  }
+
+  if (body.description !== undefined && body.description !== null && typeof body.description !== "string") {
+    return { ok: false, message: "Description must be a string or null." };
+  }
+
+  if (body.introText !== undefined && body.introText !== null && typeof body.introText !== "string") {
+    return { ok: false, message: "Intro text must be a string or null." };
+  }
+
+  if (body.successMessage !== undefined && body.successMessage !== null && typeof body.successMessage !== "string") {
+    return { ok: false, message: "Success message must be a string or null." };
+  }
+
+  return {
+    ok: true,
+    value: {
+      name: body.name.trim(),
+      slug,
+      description,
+      introText,
+      successMessage,
+      templateKey
+    }
+  };
+}
+
+export async function createAdminVolunteerForm(
+  env: Env,
+  organizationId: number,
+  input: CreateAdminFormInput
+): Promise<AdminFormRecord | "SLUG_IN_USE"> {
+  const existingSlug = await env.DB.prepare(
+    `SELECT id FROM volunteer_forms WHERE organization_id = ? AND slug = ? LIMIT 1`
+  )
+    .bind(organizationId, input.slug)
+    .first<{ id: number }>();
+
+  if (existingSlug) {
+    return "SLUG_IN_USE";
+  }
+
+  const defaults = CHURCH_VOLUNTEER_DEFAULT_FORM;
+  const description =
+    input.description !== undefined ? input.description : defaults.description;
+  const introText =
+    input.introText !== undefined ? input.introText : defaults.introText;
+  const successMessage =
+    input.successMessage !== undefined ? input.successMessage : defaults.successMessage;
+  const templateKey = input.templateKey ?? CHURCH_VOLUNTEER_DEFAULT_TEMPLATE_KEY;
+
+  const formInsert = await env.DB.prepare(
+    `
+    INSERT INTO volunteer_forms (
+      organization_id,
+      slug,
+      name,
+      description,
+      intro_text,
+      success_message,
+      template_key,
+      is_default,
+      is_active
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 1)
+    `
+  )
+    .bind(
+      organizationId,
+      input.slug,
+      input.name,
+      description,
+      introText,
+      successMessage,
+      templateKey
+    )
+    .run();
+
+  const formId = formInsert.meta.last_row_id;
+
+  if (!formId) {
+    throw new Error("Volunteer form insert did not return an id.");
+  }
+
+  if (templateKey === CHURCH_VOLUNTEER_DEFAULT_TEMPLATE_KEY) {
+    await provisionChurchVolunteerDefaultStructure(env, organizationId, formId);
+  }
+
+  const created = await getAdminFormById(env, formId, organizationId);
+
+  if (!created) {
+    throw new Error("Created volunteer form could not be loaded.");
+  }
+
+  return created;
 }
 
 export async function updateAdminForm(
