@@ -3,6 +3,14 @@ import { signAdminJwt } from "../auth/jwt";
 import { verifyPassword } from "../auth/passwords";
 import { findActiveAdminByEmail } from "../db/adminUsers";
 import { findActiveOrganizationById, mapPublicOrganization } from "../db/organizations";
+import { DEMO_ORGANIZATION_SLUG } from "../constants/demo";
+import {
+  getAdminFormById,
+  listAdminForms,
+  mapAdminForm,
+  updateAdminForm,
+  validateUpdateAdminFormInput
+} from "../db/adminForms";
 import {
   deleteAdminSubmission,
   getAdminSubmissionDetail,
@@ -47,6 +55,30 @@ export async function adminRoutes(
     }
 
     return submissions(request, env);
+  }
+
+  if (url.pathname === "/api/admin/forms") {
+    if (request.method !== "GET") {
+      return methodNotAllowed();
+    }
+
+    return listForms(request, env);
+  }
+
+  const adminFormMatch = url.pathname.match(/^\/api\/admin\/forms\/(\d+)$/);
+
+  if (adminFormMatch) {
+    const formId = Number(adminFormMatch[1]);
+
+    if (request.method === "GET") {
+      return getForm(request, env, formId);
+    }
+
+    if (request.method === "PATCH") {
+      return patchForm(request, env, formId);
+    }
+
+    return methodNotAllowed();
   }
 
   const submissionNotesMatch = url.pathname.match(
@@ -208,6 +240,116 @@ async function submissions(request: Request, env: Env): Promise<Response> {
   } catch (error) {
     console.error("Failed admin submissions lookup", error);
     return serverError("Unable to load submissions.");
+  }
+}
+
+async function listForms(request: Request, env: Env): Promise<Response> {
+  try {
+    const auth = await requireAdmin(request, env);
+
+    if (auth.response) {
+      return auth.response;
+    }
+
+    const forms = await listAdminForms(env, auth.admin!.organizationId);
+
+    return json({
+      success: true,
+      data: {
+        forms: forms.map(mapAdminForm)
+      }
+    });
+  } catch (error) {
+    console.error("Failed admin forms lookup", error);
+    return serverError("Unable to load forms.");
+  }
+}
+
+async function getForm(request: Request, env: Env, formId: number): Promise<Response> {
+  try {
+    const auth = await requireAdmin(request, env);
+
+    if (auth.response) {
+      return auth.response;
+    }
+
+    const form = await getAdminFormById(env, formId, auth.admin!.organizationId);
+
+    if (!form) {
+      return notFound();
+    }
+
+    return json({
+      success: true,
+      data: {
+        form: mapAdminForm(form)
+      }
+    });
+  } catch (error) {
+    console.error("Failed admin form lookup", error);
+    return serverError("Unable to load form.");
+  }
+}
+
+async function patchForm(request: Request, env: Env, formId: number): Promise<Response> {
+  try {
+    const auth = await requireAdmin(request, env);
+
+    if (auth.response) {
+      return auth.response;
+    }
+
+    const organization = await findActiveOrganizationById(env, auth.admin!.organizationId);
+
+    if (!organization) {
+      return serverError("Admin organization is not available.");
+    }
+
+    if (organization.slug === DEMO_ORGANIZATION_SLUG) {
+      return badRequest(
+        "The demo organization form cannot be edited.",
+        "DEMO_FORM_READ_ONLY"
+      );
+    }
+
+    let body: unknown;
+
+    try {
+      body = await request.json();
+    } catch {
+      return badRequest("Request body must be valid JSON.", "INVALID_JSON");
+    }
+
+    if (!isRecord(body)) {
+      return badRequest("Request body must be a JSON object.");
+    }
+
+    const validation = validateUpdateAdminFormInput(body);
+
+    if (!validation.ok) {
+      return badRequest(validation.message);
+    }
+
+    const updated = await updateAdminForm(
+      env,
+      formId,
+      auth.admin!.organizationId,
+      validation.value
+    );
+
+    if (!updated) {
+      return notFound();
+    }
+
+    return json({
+      success: true,
+      data: {
+        form: mapAdminForm(updated)
+      }
+    });
+  } catch (error) {
+    console.error("Failed admin form update", error);
+    return serverError("Unable to update form.");
   }
 }
 
