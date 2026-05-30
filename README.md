@@ -71,6 +71,7 @@ Migrations live in `migrations/`:
 - `0002_seed_demo_organization_and_form.sql` — org `demo`, form `general-serving`, demo admin
 - `0003_seed_demo_serving_areas.sql` — demo serving areas and requirements
 - `0004_seed_demo_sample_submissions.sql` — demo dashboard sample rows
+- `0005_form_sections.sql` — form sections (group headings), serving areas linked to sections
 
 **Remote D1:** `d1:migrations:apply:remote` changes production data. Run it only when you intend to update the deployed database.
 
@@ -105,6 +106,8 @@ All public volunteer data and submissions are scoped by **organization slug** (a
 | `POST` | `/api/organizations/:organizationSlug/forms/:formSlug/submissions` | Create submission for that form |
 | `POST` | `/api/organizations/:organizationSlug/volunteer-submissions` | Create submission on org default form |
 
+Public form payloads include **sections** (when present), serving areas, and requirements. Submissions require **email and phone** (validated server-side).
+
 Legacy global routes (`GET /api/serving-areas`, `POST /api/volunteer-submissions`) are **removed**. Use the organization routes above (e.g. slug `demo`).
 
 ### Admin (JWT: `Authorization: Bearer <token>`)
@@ -119,6 +122,20 @@ Legacy global routes (`GET /api/serving-areas`, `POST /api/volunteer-submissions
 | `DELETE` | `/api/admin/submissions/:id` | Delete submission in org (demo/test cleanup) |
 | `POST` | `/api/admin/submissions/:id/notes` | Add staff-only note to a submission |
 | `DELETE` | `/api/admin/notes/:noteId` | Delete a note in the authenticated admin’s org |
+| `GET` | `/api/admin/forms` | List volunteer forms for the admin’s org |
+| `POST` | `/api/admin/forms` | Create form (template or blank); **not allowed** for org slug `demo` |
+| `GET` | `/api/admin/forms/:formId` | Form detail (sections, areas, requirements) |
+| `PATCH` | `/api/admin/forms/:formId` | Update form metadata (title, slug, intro, active flag, etc.); demo org read-only |
+| `DELETE` | `/api/admin/forms/:formId` | Delete form (demo org read-only) |
+| `POST` | `/api/admin/forms/:formId/sections` | Add section |
+| `PATCH` | `/api/admin/form-sections/:sectionId` | Update section |
+| `DELETE` | `/api/admin/form-sections/:sectionId` | Delete section |
+| `POST` | `/api/admin/forms/:formId/serving-areas` | Add serving area |
+| `PATCH` | `/api/admin/serving-areas/:servingAreaId` | Update serving area |
+| `DELETE` | `/api/admin/serving-areas/:servingAreaId` | Delete serving area |
+| `POST` | `/api/admin/serving-areas/:servingAreaId/requirements` | Add requirement / acknowledgement |
+| `PATCH` | `/api/admin/requirements/:requirementId` | Update requirement |
+| `DELETE` | `/api/admin/requirements/:requirementId` | Delete requirement |
 
 Login and `/api/admin/me` include `organizationId` on the admin object and a public `organization` object (`slug`, `name`, etc.).
 
