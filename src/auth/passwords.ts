@@ -1,5 +1,6 @@
 export async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
-  const [prefix, ...parts] = storedHash.split("$");
+  try {
+    const [prefix, ...parts] = storedHash.split("$");
 
   if (prefix === "sha256") {
     const [salt, expectedHash] = parts;
@@ -28,9 +29,12 @@ export async function verifyPassword(password: string, storedHash: string): Prom
   }
 
   return false;
+  } catch {
+    return false;
+  }
 }
 
-const PBKDF2_ITERATIONS = 210_000;
+const PBKDF2_ITERATIONS = 10_000;
 
 export async function hashPassword(password: string): Promise<string> {
   const salt = randomSalt();

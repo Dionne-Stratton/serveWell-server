@@ -51,7 +51,7 @@ INSERT INTO admin_users (
 ) VALUES (
   1,
   'church@example.com',
-  'pbkdf2_sha256$210000$servewell-demo-admin-v1$nML8YMfCFtlAavEyMIDJ3C7N4wFjK0lcJ4i7B//gtaI=',
+  'sha256$servewell-demo-admin-v2$AKpxxkopvoifk4qqWOa7VaKMbNWT7FUeNslmIta6JJE=',
   'Church Admin',
   'admin',
   1
