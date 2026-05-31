@@ -1,4 +1,14 @@
 import type { Env } from "../types";
+import {
+  normalizeSubmissionStatus,
+  requirementsPendingStatusFilterValues,
+} from "../lib/submissionStatus";
+
+export interface AdminSubmissionStaffNote {
+  id: number;
+  note: string;
+  createdAt: string;
+}
 
 export interface AdminSubmissionListItem {
   id: number;
@@ -18,6 +28,7 @@ export interface AdminSubmissionListItem {
   requiresBackgroundCheck: boolean;
   requiresTraining: boolean;
   createdAt: string;
+  staffNotes: AdminSubmissionStaffNote[];
 }
 
 export interface AdminSubmissionDetail {
@@ -169,8 +180,16 @@ export async function listAdminSubmissions(
   }
 
   if (filters.status) {
-    conditions.push("vs.status = ?");
-    bindings.push(filters.status);
+    if (filters.status === "requirements_pending") {
+      const placeholders = requirementsPendingStatusFilterValues()
+        .map(() => "?")
+        .join(", ");
+      conditions.push(`vs.status IN (${placeholders})`);
+      bindings.push(...requirementsPendingStatusFilterValues());
+    } else {
+      conditions.push("vs.status = ?");
+      bindings.push(filters.status);
+    }
   }
 
   if (typeof filters.archived === "boolean") {
@@ -231,7 +250,15 @@ export async function listAdminSubmissions(
     .bind(...bindings)
     .all<AdminSubmissionRow>();
 
-  return (result.results ?? []).map(mapAdminSubmissionListItem);
+  const rows = result.results ?? [];
+  const staffNotesBySubmission = await listStaffNotesForSubmissions(
+    env,
+    rows.map((row) => row.id)
+  );
+
+  return rows.map((row) =>
+    mapAdminSubmissionListItem(row, staffNotesBySubmission.get(row.id) ?? [])
+  );
 }
 
 export async function getAdminSubmissionDetail(
@@ -305,10 +332,10 @@ export async function getAdminSubmissionDetail(
       openToSpecialEvents: Boolean(submission.open_to_special_events),
       experienceNotes: submission.experience_notes,
       additionalNotes: submission.additional_notes,
-      status: submission.status,
+      status: normalizeSubmissionStatus(submission.status),
       isArchived: Boolean(submission.is_archived),
       createdAt: submission.created_at,
-      updatedAt: submission.updated_at
+      updatedAt: submission.updated_at,
     },
     interests,
     requirementConfirmations: confirmations,
@@ -390,6 +417,41 @@ async function listRequirementConfirmations(
     label: row.label,
     confirmed: Boolean(row.confirmed)
   }));
+}
+
+async function listStaffNotesForSubmissions(
+  env: Env,
+  submissionIds: number[]
+): Promise<Map<number, AdminSubmissionStaffNote[]>> {
+  const map = new Map<number, AdminSubmissionStaffNote[]>();
+
+  if (submissionIds.length === 0) {
+    return map;
+  }
+
+  const placeholders = submissionIds.map(() => "?").join(", ");
+  const result = await env.DB.prepare(
+    `
+    SELECT id, submission_id, note, created_at
+    FROM admin_notes
+    WHERE submission_id IN (${placeholders})
+    ORDER BY submission_id ASC, created_at ASC, id ASC
+    `
+  )
+    .bind(...submissionIds)
+    .all<AdminNoteRow>();
+
+  for (const row of result.results ?? []) {
+    const list = map.get(row.submission_id) ?? [];
+    list.push({
+      id: row.id,
+      note: row.note,
+      createdAt: row.created_at,
+    });
+    map.set(row.submission_id, list);
+  }
+
+  return map;
 }
 
 async function listAdminNotes(
@@ -496,7 +558,10 @@ export async function deleteAdminSubmission(
   return (result.meta.changes ?? 0) > 0;
 }
 
-function mapAdminSubmissionListItem(row: AdminSubmissionRow): AdminSubmissionListItem {
+function mapAdminSubmissionListItem(
+  row: AdminSubmissionRow,
+  staffNotes: AdminSubmissionStaffNote[]
+): AdminSubmissionListItem {
   return {
     id: row.id,
     formId: row.form_id,
@@ -509,12 +574,13 @@ function mapAdminSubmissionListItem(row: AdminSubmissionRow): AdminSubmissionLis
     overallFrequency: row.overall_frequency,
     availability: splitGroupConcat(row.availability),
     openToSpecialEvents: Boolean(row.open_to_special_events),
-    status: row.status,
+    status: normalizeSubmissionStatus(row.status),
     isArchived: Boolean(row.is_archived),
     servingAreas: splitGroupConcat(row.serving_areas),
     requiresBackgroundCheck: Boolean(row.requires_background_check),
     requiresTraining: Boolean(row.requires_training),
-    createdAt: row.created_at
+    createdAt: row.created_at,
+    staffNotes,
   };
 }
 
