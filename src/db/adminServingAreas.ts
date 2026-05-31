@@ -1,4 +1,10 @@
 import type { Env } from "../types";
+import {
+  isRecruitmentStatus,
+  normalizeRecruitmentStatus,
+  recruitmentStatusToIsActive,
+  type RecruitmentStatus,
+} from "../lib/recruitmentStatus";
 
 const MAX_AREA_TEXT = 2000;
 const MAX_AREA_NAME = 120;
@@ -17,6 +23,7 @@ export type AdminServingAreaRecord = {
   requiresBackgroundCheck: boolean;
   requiresTraining: boolean;
   requiresAuditionOrInterview: boolean;
+  recruitmentStatus: RecruitmentStatus;
   isActive: boolean;
   sortOrder: number;
 };
@@ -34,6 +41,7 @@ interface ServingAreaAdminRow {
   requires_background_check: number;
   requires_training: number;
   requires_audition_or_interview: number;
+  recruitment_status: string;
   is_active: number;
   sort_order: number;
 }
@@ -47,6 +55,7 @@ export type CreateAdminServingAreaInput = {
   requiresBackgroundCheck?: boolean;
   requiresTraining?: boolean;
   requiresAuditionOrInterview?: boolean;
+  recruitmentStatus?: RecruitmentStatus;
   isActive?: boolean;
   sortOrder?: number;
 };
@@ -59,11 +68,14 @@ export type UpdateAdminServingAreaInput = {
   requiresBackgroundCheck?: boolean;
   requiresTraining?: boolean;
   requiresAuditionOrInterview?: boolean;
+  recruitmentStatus?: RecruitmentStatus;
   isActive?: boolean;
   sortOrder?: number;
 };
 
 function mapRow(row: ServingAreaAdminRow): AdminServingAreaRecord {
+  const isActive = Boolean(row.is_active);
+  const recruitmentStatus = normalizeRecruitmentStatus(row.recruitment_status, isActive);
   return {
     id: row.id,
     organizationId: row.organization_id,
@@ -77,7 +89,8 @@ function mapRow(row: ServingAreaAdminRow): AdminServingAreaRecord {
     requiresBackgroundCheck: Boolean(row.requires_background_check),
     requiresTraining: Boolean(row.requires_training),
     requiresAuditionOrInterview: Boolean(row.requires_audition_or_interview),
-    isActive: Boolean(row.is_active),
+    recruitmentStatus,
+    isActive: recruitmentStatusToIsActive(recruitmentStatus),
     sortOrder: row.sort_order
   };
 }
@@ -93,6 +106,7 @@ export function mapAdminServingArea(area: AdminServingAreaRecord) {
     requiresBackgroundCheck: area.requiresBackgroundCheck,
     requiresTraining: area.requiresTraining,
     requiresAuditionOrInterview: area.requiresAuditionOrInterview,
+    recruitmentStatus: area.recruitmentStatus,
     isActive: area.isActive,
     sortOrder: area.sortOrder
   };
@@ -118,6 +132,7 @@ export async function listAdminServingAreasForForm(
       requires_background_check,
       requires_training,
       requires_audition_or_interview,
+      recruitment_status,
       is_active,
       sort_order
     FROM serving_areas
@@ -151,6 +166,7 @@ export async function getAdminServingAreaById(
       requires_background_check,
       requires_training,
       requires_audition_or_interview,
+      recruitment_status,
       is_active,
       sort_order
     FROM serving_areas
@@ -208,9 +224,22 @@ export function validateCreateAdminServingAreaInput(
     requiresBackgroundCheck: body.requiresBackgroundCheck === true,
     requiresTraining: body.requiresTraining === true,
     requiresAuditionOrInterview: body.requiresAuditionOrInterview === true,
+    recruitmentStatus:
+      body.recruitmentStatus !== undefined && isRecruitmentStatus(body.recruitmentStatus)
+        ? body.recruitmentStatus
+        : body.isActive === false
+          ? "closed"
+          : "open",
     isActive: body.isActive !== false,
     sortOrder: typeof body.sortOrder === "number" ? body.sortOrder : undefined
   };
+
+  if (body.recruitmentStatus !== undefined && !isRecruitmentStatus(body.recruitmentStatus)) {
+    return { ok: false, message: "recruitmentStatus must be open, needed, urgent, or closed." };
+  }
+
+  value.recruitmentStatus = value.recruitmentStatus ?? "open";
+  value.isActive = recruitmentStatusToIsActive(value.recruitmentStatus);
 
   return { ok: true, value };
 }
@@ -264,6 +293,23 @@ export function validateUpdateAdminServingAreaInput(
       value[field] = body[key] as boolean;
       hasField = true;
     }
+  }
+
+  if (body.recruitmentStatus !== undefined) {
+    if (!isRecruitmentStatus(body.recruitmentStatus)) {
+      return {
+        ok: false,
+        message: "recruitmentStatus must be open, needed, urgent, or closed."
+      };
+    }
+    value.recruitmentStatus = body.recruitmentStatus;
+    hasField = true;
+  }
+
+  if (value.recruitmentStatus !== undefined) {
+    value.isActive = recruitmentStatusToIsActive(value.recruitmentStatus);
+  } else if (value.isActive !== undefined && value.recruitmentStatus === undefined) {
+    value.recruitmentStatus = value.isActive ? "open" : "closed";
   }
 
   if (body.sortOrder !== undefined) {
@@ -330,6 +376,9 @@ export async function createAdminServingArea(
         .first<{ next_order: number }>()
     )?.next_order ?? 10);
 
+  const recruitmentStatus = input.recruitmentStatus ?? "open";
+  const isActive = recruitmentStatusToIsActive(recruitmentStatus);
+
   const insert = await env.DB.prepare(
     `
     INSERT INTO serving_areas (
@@ -344,9 +393,10 @@ export async function createAdminServingArea(
       requires_background_check,
       requires_training,
       requires_audition_or_interview,
+      recruitment_status,
       is_active,
       sort_order
-    ) VALUES (?, ?, ?, ?, ?, 'custom', ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, 'custom', ?, ?, ?, ?, ?, ?, ?, ?)
     `
   )
     .bind(
@@ -360,7 +410,8 @@ export async function createAdminServingArea(
       input.requiresBackgroundCheck ? 1 : 0,
       input.requiresTraining ? 1 : 0,
       input.requiresAuditionOrInterview ? 1 : 0,
-      input.isActive !== false ? 1 : 0,
+      recruitmentStatus,
+      isActive ? 1 : 0,
       sortOrder
     )
     .run();
@@ -392,6 +443,17 @@ export async function updateAdminServingArea(
     return null;
   }
 
+  const recruitmentStatus =
+    input.recruitmentStatus ??
+    (input.isActive !== undefined
+      ? input.isActive
+        ? existing.recruitmentStatus === "closed"
+          ? "open"
+          : existing.recruitmentStatus
+        : "closed"
+      : existing.recruitmentStatus);
+  const isActive = recruitmentStatusToIsActive(recruitmentStatus);
+
   await env.DB.prepare(
     `
     UPDATE serving_areas
@@ -403,6 +465,7 @@ export async function updateAdminServingArea(
       requires_background_check = ?,
       requires_training = ?,
       requires_audition_or_interview = ?,
+      recruitment_status = ?,
       is_active = ?,
       sort_order = ?,
       updated_at = CURRENT_TIMESTAMP
@@ -417,7 +480,8 @@ export async function updateAdminServingArea(
       (input.requiresBackgroundCheck ?? existing.requiresBackgroundCheck) ? 1 : 0,
       (input.requiresTraining ?? existing.requiresTraining) ? 1 : 0,
       (input.requiresAuditionOrInterview ?? existing.requiresAuditionOrInterview) ? 1 : 0,
-      (input.isActive ?? existing.isActive) ? 1 : 0,
+      recruitmentStatus,
+      isActive ? 1 : 0,
       input.sortOrder ?? existing.sortOrder,
       servingAreaId,
       organizationId

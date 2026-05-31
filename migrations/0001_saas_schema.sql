@@ -57,6 +57,8 @@ CREATE TABLE IF NOT EXISTS serving_areas (
   requires_background_check INTEGER NOT NULL DEFAULT 0,
   requires_training INTEGER NOT NULL DEFAULT 0,
   requires_audition_or_interview INTEGER NOT NULL DEFAULT 0,
+  recruitment_status TEXT NOT NULL DEFAULT 'open'
+    CHECK (recruitment_status IN ('open', 'needed', 'urgent', 'closed')),
   is_active INTEGER NOT NULL DEFAULT 1,
   sort_order INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,

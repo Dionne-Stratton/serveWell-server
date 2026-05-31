@@ -1,4 +1,5 @@
 import type { Env } from "../types";
+import type { RecruitmentStatus } from "../lib/recruitmentStatus";
 import { buildPublicFormSections, flattenPublicSections } from "./publicFormSections";
 
 interface ServingAreaRow {
@@ -44,6 +45,7 @@ export interface ServingArea {
   requiresBackgroundCheck: boolean;
   requiresTraining: boolean;
   requiresAuditionOrInterview: boolean;
+  recruitmentStatus: RecruitmentStatus;
   requirements: ServingAreaRequirement[];
 }
 

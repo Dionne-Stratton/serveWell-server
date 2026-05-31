@@ -224,7 +224,7 @@ async function validateServingAreaRules(
     FROM serving_areas sa
     LEFT JOIN serving_area_requirements sar
       ON sar.serving_area_id = sa.id
-    WHERE sa.is_active = 1
+    WHERE sa.recruitment_status IN ('open', 'needed', 'urgent')
       AND sa.organization_id = ?
       AND sa.form_id = ?
       AND sa.id IN (${placeholders})

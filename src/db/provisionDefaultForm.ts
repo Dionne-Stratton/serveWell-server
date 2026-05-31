@@ -46,9 +46,10 @@ export async function provisionChurchVolunteerDefaultStructure(
         requires_background_check,
         requires_training,
         requires_audition_or_interview,
+        recruitment_status,
         sort_order,
         is_active
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, 1)
       `
     )
       .bind(

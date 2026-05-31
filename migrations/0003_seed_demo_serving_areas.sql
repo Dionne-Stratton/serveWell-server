@@ -10,20 +10,21 @@ INSERT INTO serving_areas (
   requires_background_check,
   requires_training,
   requires_audition_or_interview,
+  recruitment_status,
   sort_order
 ) VALUES
-  (1, 1, 1, 'worship-singer', 'Worship Team / Singer', 'worship', 'Help lead the church in worship through singing.', 'This role may require rehearsal availability and an audition or conversation with the worship leader.', 0, 0, 1, 10),
-  (2, 1, 1, 'bass-player', 'Bass Player', 'worship', 'Serve with the worship team as a bass player.', 'This role may require rehearsal availability and an audition or conversation with the worship leader.', 0, 0, 1, 20),
-  (3, 1, 1, 'other-instrumentalist', 'Other Instrumentalist', 'worship', 'Serve with the worship team using another instrument.', 'This role may require rehearsal availability and an audition or conversation with the worship leader.', 0, 0, 1, 30),
-  (4, 1, 1, 'slides', 'Slides', 'media_tech', 'Run worship lyrics, sermon slides, and other presentation elements.', 'Training may be provided before serving independently.', 0, 1, 0, 40),
-  (5, 1, 1, 'sound', 'Sound', 'media_tech', 'Help with audio setup and live sound during services or events.', 'Training may be provided before serving independently.', 0, 1, 0, 50),
-  (6, 1, 1, 'camera-livestream', 'Camera / Livestream', 'media_tech', 'Help operate cameras or livestream equipment for services.', 'This role is usually connected to Sunday morning services.', 0, 1, 0, 60),
-  (7, 1, 1, 'kids-ministry', 'Kids Ministry', 'kids_youth', 'Serve children and families through kids ministry.', 'This role requires a background check before serving.', 1, 1, 0, 70),
-  (8, 1, 1, 'youth-ministry', 'Youth Ministry', 'kids_youth', 'Serve students through youth ministry gatherings and events.', 'This role usually requires Wednesday night availability and a background check.', 1, 1, 0, 80),
-  (9, 1, 1, 'greeting-hospitality', 'Greeting / Hospitality', 'hospitality', 'Welcome people and help create a warm Sunday experience.', NULL, 0, 0, 0, 90),
-  (10, 1, 1, 'setup-cleanup', 'Setup / Cleanup', 'general', 'Help prepare spaces before services or events and reset them afterward.', NULL, 0, 0, 0, 100),
-  (11, 1, 1, 'events-special-events', 'Events / Special Events', 'events', 'Help with occasional church events and special gatherings.', 'Special events may be outside the normal serving rhythm.', 0, 0, 0, 110),
-  (12, 1, 1, 'prayer-ministry-team', 'Prayer / Ministry Team', 'prayer_ministry', 'Pray with and care for people during ministry moments.', 'This role may involve training or a conversation with church leadership.', 0, 1, 0, 120)
+  (1, 1, 1, 'worship-singer', 'Worship Team / Singer', 'worship', 'Help lead the church in worship through singing.', 'This role may require rehearsal availability and an audition or conversation with the worship leader.', 0, 0, 1, 'open', 10),
+  (2, 1, 1, 'bass-player', 'Bass Player', 'worship', 'Serve with the worship team as a bass player.', 'This role may require rehearsal availability and an audition or conversation with the worship leader.', 0, 0, 1, 'open', 20),
+  (3, 1, 1, 'other-instrumentalist', 'Other Instrumentalist', 'worship', 'Serve with the worship team using another instrument.', 'This role may require rehearsal availability and an audition or conversation with the worship leader.', 0, 0, 1, 'open', 30),
+  (4, 1, 1, 'slides', 'Slides', 'media_tech', 'Run worship lyrics, sermon slides, and other presentation elements.', 'Training may be provided before serving independently.', 0, 1, 0, 'open', 40),
+  (5, 1, 1, 'sound', 'Sound', 'media_tech', 'Help with audio setup and live sound during services or events.', 'Training may be provided before serving independently.', 0, 1, 0, 'open', 50),
+  (6, 1, 1, 'camera-livestream', 'Camera / Livestream', 'media_tech', 'Help operate cameras or livestream equipment for services.', 'This role is usually connected to Sunday morning services.', 0, 1, 0, 'open', 60),
+  (7, 1, 1, 'kids-ministry', 'Kids Ministry', 'kids_youth', 'Serve children and families through kids ministry.', 'This role requires a background check before serving.', 1, 1, 0, 'open', 70),
+  (8, 1, 1, 'youth-ministry', 'Youth Ministry', 'kids_youth', 'Serve students through youth ministry gatherings and events.', 'This role usually requires Wednesday night availability and a background check.', 1, 1, 0, 'open', 80),
+  (9, 1, 1, 'greeting-hospitality', 'Greeting / Hospitality', 'hospitality', 'Welcome people and help create a warm Sunday experience.', NULL, 0, 0, 0, 'open', 90),
+  (10, 1, 1, 'setup-cleanup', 'Setup / Cleanup', 'general', 'Help prepare spaces before services or events and reset them afterward.', NULL, 0, 0, 0, 'open', 100),
+  (11, 1, 1, 'events-special-events', 'Events / Special Events', 'events', 'Help with occasional church events and special gatherings.', 'Special events may be outside the normal serving rhythm.', 0, 0, 0, 'open', 110),
+  (12, 1, 1, 'prayer-ministry-team', 'Prayer / Ministry Team', 'prayer_ministry', 'Pray with and care for people during ministry moments.', 'This role may involve training or a conversation with church leadership.', 0, 1, 0, 'open', 120)
 ON CONFLICT(form_id, slug) DO UPDATE SET
   organization_id = excluded.organization_id,
   name = excluded.name,
@@ -33,6 +34,7 @@ ON CONFLICT(form_id, slug) DO UPDATE SET
   requires_background_check = excluded.requires_background_check,
   requires_training = excluded.requires_training,
   requires_audition_or_interview = excluded.requires_audition_or_interview,
+  recruitment_status = excluded.recruitment_status,
   sort_order = excluded.sort_order,
   is_active = 1,
   updated_at = CURRENT_TIMESTAMP;

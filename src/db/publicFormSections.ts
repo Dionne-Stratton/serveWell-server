@@ -1,4 +1,5 @@
 import type { Env } from "../types";
+import { normalizeRecruitmentStatus } from "../lib/recruitmentStatus";
 import { listFormSections, mapPublicSection } from "./formSections";
 import type { ServingArea } from "./servingAreas";
 
@@ -12,6 +13,7 @@ interface ServingAreaRow {
   requires_background_check: number;
   requires_training: number;
   requires_audition_or_interview: number;
+  recruitment_status: string;
   requirement_id: number | null;
   requirement_type: string | null;
   requirement_label: string | null;
@@ -43,6 +45,7 @@ export async function buildPublicFormSections(
       sa.requires_background_check,
       sa.requires_training,
       sa.requires_audition_or_interview,
+      sa.recruitment_status,
       sa.sort_order,
       sar.id AS requirement_id,
       sar.requirement_type,
@@ -56,7 +59,7 @@ export async function buildPublicFormSections(
     FROM serving_areas sa
     LEFT JOIN serving_area_requirements sar
       ON sar.serving_area_id = sa.id
-    WHERE sa.is_active = 1
+    WHERE sa.recruitment_status IN ('open', 'needed', 'urgent')
       AND sa.organization_id = ?
       AND sa.form_id = ?
     ORDER BY sa.sort_order ASC, sa.name ASC, sar.sort_order ASC, sar.id ASC
@@ -87,6 +90,7 @@ export async function buildPublicFormSections(
         requiresBackgroundCheck: Boolean(row.requires_background_check),
         requiresTraining: Boolean(row.requires_training),
         requiresAuditionOrInterview: Boolean(row.requires_audition_or_interview),
+        recruitmentStatus: normalizeRecruitmentStatus(row.recruitment_status, true),
         requirements: []
       };
       areaBuilders.set(row.id, area);
