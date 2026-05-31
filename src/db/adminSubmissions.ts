@@ -85,6 +85,7 @@ export interface AdminSubmissionFilters {
   status?: string;
   archived?: boolean;
   servingAreaId?: number;
+  formSectionId?: number;
   search?: string;
 }
 
@@ -204,6 +205,19 @@ export async function listAdminSubmissions(
     bindings.push(filters.servingAreaId);
   }
 
+  if (filters.formSectionId) {
+    conditions.push(
+      `EXISTS (
+        SELECT 1
+        FROM volunteer_interests vi_section
+        INNER JOIN serving_areas sa_section ON sa_section.id = vi_section.serving_area_id
+        WHERE vi_section.submission_id = vs.id
+          AND sa_section.section_id = ?
+      )`
+    );
+    bindings.push(filters.formSectionId);
+  }
+
   if (filters.search) {
     conditions.push(
       "(lower(vs.first_name) LIKE ? OR lower(vs.last_name) LIKE ? OR lower(vs.email) LIKE ? OR lower(vs.phone) LIKE ?)"
@@ -229,7 +243,7 @@ export async function listAdminSubmissions(
       vs.status,
       vs.is_archived,
       vs.created_at,
-      GROUP_CONCAT(DISTINCT sa.name) AS serving_areas,
+      GROUP_CONCAT(DISTINCT COALESCE(sa.name, vi.serving_area_name)) AS serving_areas,
       GROUP_CONCAT(DISTINCT va.availability_key) AS availability,
       MAX(sa.requires_background_check) AS requires_background_check,
       MAX(sa.requires_training) AS requires_training

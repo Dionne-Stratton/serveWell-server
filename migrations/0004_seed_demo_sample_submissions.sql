@@ -79,6 +79,12 @@ ON CONFLICT(id) DO UPDATE SET
   is_archived = excluded.is_archived,
   updated_at = CURRENT_TIMESTAMP;
 
+DELETE FROM volunteer_availability
+WHERE organization_id = 1 AND form_id = 1 AND submission_id IN (1, 2, 3);
+
+DELETE FROM volunteer_interests
+WHERE organization_id = 1 AND form_id = 1 AND submission_id IN (1, 2, 3);
+
 INSERT INTO volunteer_availability (organization_id, form_id, submission_id, availability_key) VALUES
   (1, 1, 1, 'sunday_morning'),
   (1, 1, 2, 'sunday_morning'),
@@ -94,8 +100,19 @@ INSERT INTO volunteer_interests (
   uses_area_specific_frequency,
   experience_level,
   interest_notes
-) VALUES
-  (1, 1, 1, 4, 0, 'experienced', 'Can serve slides most Sundays.'),
-  (1, 1, 2, 7, 0, 'some', 'Would love to help in kids ministry.'),
-  (1, 1, 3, 9, 0, 'none', NULL),
-  (1, 1, 3, 11, 0, 'not_sure', 'Happy to help with events when needed.');
+)
+SELECT 1, 1, 1, sa.id, 0, 'experienced', 'Can serve slides most Sundays.'
+FROM serving_areas sa
+WHERE sa.form_id = 1 AND sa.slug = 'slides'
+UNION ALL
+SELECT 1, 1, 2, sa.id, 0, 'some', 'Would love to help in kids ministry.'
+FROM serving_areas sa
+WHERE sa.form_id = 1 AND sa.slug = 'kids-ministry'
+UNION ALL
+SELECT 1, 1, 3, sa.id, 0, 'none', NULL
+FROM serving_areas sa
+WHERE sa.form_id = 1 AND sa.slug = 'greeting-hospitality'
+UNION ALL
+SELECT 1, 1, 3, sa.id, 0, 'not_sure', 'Happy to help with events when needed.'
+FROM serving_areas sa
+WHERE sa.form_id = 1 AND sa.slug = 'events-special-events';

@@ -647,6 +647,7 @@ function parseSubmissionFilters(searchParams: URLSearchParams) {
   const status = normalizeOptionalString(searchParams.get("status"));
   const archived = normalizeOptionalBoolean(searchParams.get("archived"));
   const servingAreaId = normalizeOptionalPositiveInteger(searchParams.get("servingAreaId"));
+  const formSectionId = normalizeOptionalPositiveInteger(searchParams.get("formSectionId"));
   const search = normalizeOptionalString(searchParams.get("search"));
 
   return {
@@ -654,6 +655,7 @@ function parseSubmissionFilters(searchParams: URLSearchParams) {
     status,
     archived,
     servingAreaId,
+    formSectionId,
     search
   };
 }
