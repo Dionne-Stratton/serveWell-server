@@ -105,7 +105,7 @@ async function connect(request: Request, env: Env): Promise<Response> {
     const codeVerifier = createRandomUrlSafeString(64);
     const codeChallenge = await createCodeChallenge(codeVerifier);
     const state = createRandomUrlSafeString(32);
-    const redirectPath = `/${organization.slug}/admin/integrations/planning-center`;
+    const redirectPath = `/${organization.slug}/admin`;
 
     await createPlanningCenterOAuthState(env, {
       state,
