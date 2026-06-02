@@ -1,7 +1,9 @@
 JWT_SECRET="replace-with-local-development-secret"
 FRONTEND_ORIGIN="http://localhost:5173"
 ENVIRONMENT="development"
-
-# Seeded demo admin:
-# email: church@example.com
-# password: temporary-password
+TEMP_EMAIL="church@example.com"
+TEMP_PASSWORD="temporary-password"
+PLANNING_CENTER_CLIENT_ID=your-id
+PLANNING_CENTER_CLIENT_SECRET=your-secret
+PLANNING_CENTER_REDIRECT_URI="[baseURL]/api/planning-center/callback"
+PLANNING_CENTER_REDIRECT_URI_LOCAL="http://localhost:8787/api/planning-center/callback"

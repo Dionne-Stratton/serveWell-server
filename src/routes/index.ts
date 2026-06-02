@@ -1,6 +1,7 @@
 import { adminRoutes } from "./admin";
 import { authRoutes } from "./auth";
 import { organizationRoutes } from "./organizations";
+import { planningCenterRoutes } from "./planningCenter";
 import { volunteerRoutes } from "./volunteers";
 import { json, notFound } from "../http/responses";
 import type { Env } from "../types";
@@ -35,6 +36,13 @@ export async function routeRequest(
 
   if (url.pathname.startsWith("/api/organizations/")) {
     return organizationRoutes(request, env, ctx);
+  }
+
+  if (
+    url.pathname === "/api/planning-center/callback" ||
+    url.pathname.startsWith("/api/admin/integrations/planning-center")
+  ) {
+    return planningCenterRoutes(request, env, ctx);
   }
 
   if (url.pathname.startsWith("/api/admin")) {
