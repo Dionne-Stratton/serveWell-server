@@ -161,6 +161,25 @@ export async function consumePlanningCenterOAuthState(
   };
 }
 
+export async function updatePlanningCenterIntegrationVolunteeringSettings(
+  env: Env,
+  organizationId: number,
+  volunteering: unknown
+): Promise<void> {
+  const settings = (await getPlanningCenterIntegrationSettings(env, organizationId)) ?? {};
+  settings.volunteering = volunteering;
+
+  await env.DB.prepare(
+    `
+    UPDATE organization_integrations
+    SET settings_json = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE organization_id = ? AND provider = ?
+  `
+  )
+    .bind(JSON.stringify(settings), organizationId, PLANNING_CENTER_PROVIDER)
+    .run();
+}
+
 export async function getPlanningCenterIntegrationSettings(
   env: Env,
   organizationId: number
@@ -236,7 +255,7 @@ export async function upsertConnectedPlanningCenterIntegration(
       access_token_expires_at = excluded.access_token_expires_at,
       settings_json = excluded.settings_json,
       last_connected_at = CURRENT_TIMESTAMP,
-      last_error = ?,
+      last_error = excluded.last_error,
       updated_at = CURRENT_TIMESTAMP
   `
   )

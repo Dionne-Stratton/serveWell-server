@@ -49,6 +49,7 @@ export interface AdminSubmissionDetail {
     additionalNotes: string | null;
     status: string;
     isArchived: boolean;
+    planningCenterPersonId: string | null;
     createdAt: string;
     updatedAt: string;
   };
@@ -92,6 +93,8 @@ export interface AdminSubmissionFilters {
 export interface UpdateAdminSubmissionInput {
   status?: string;
   isArchived?: boolean;
+  /** Set when pushing or linking from Planning Center (not exposed on public PATCH). */
+  planningCenterPersonId?: string;
 }
 
 interface AdminSubmissionRow {
@@ -130,6 +133,7 @@ interface AdminSubmissionDetailRow {
   additional_notes: string | null;
   status: string;
   is_archived: number;
+  planning_center_person_id: string | null;
   created_at: string;
   updated_at: string;
   availability: string | null;
@@ -300,6 +304,7 @@ export async function getAdminSubmissionDetail(
       vs.additional_notes,
       vs.status,
       vs.is_archived,
+      vs.planning_center_person_id,
       vs.created_at,
       vs.updated_at,
       GROUP_CONCAT(DISTINCT va.availability_key) AS availability
@@ -348,6 +353,7 @@ export async function getAdminSubmissionDetail(
       additionalNotes: submission.additional_notes,
       status: normalizeSubmissionStatus(submission.status),
       isArchived: Boolean(submission.is_archived),
+      planningCenterPersonId: submission.planning_center_person_id ?? null,
       createdAt: submission.created_at,
       updatedAt: submission.updated_at,
     },
@@ -502,17 +508,28 @@ export async function updateAdminSubmission(
   submissionId: number,
   organizationId: number,
   input: UpdateAdminSubmissionInput
-): Promise<{ id: number; status: string; isArchived: boolean; updatedAt: string } | null> {
+): Promise<{
+  id: number;
+  status: string;
+  isArchived: boolean;
+  planningCenterPersonId: string | null;
+  updatedAt: string;
+} | null> {
   const existing = await env.DB.prepare(
     `
-    SELECT id, status, is_archived
+    SELECT id, status, is_archived, planning_center_person_id
     FROM volunteer_submissions
     WHERE id = ? AND organization_id = ?
     LIMIT 1
     `
   )
     .bind(submissionId, organizationId)
-    .first<{ id: number; status: string; is_archived: number }>();
+    .first<{
+      id: number;
+      status: string;
+      is_archived: number;
+      planning_center_person_id: string | null;
+    }>();
 
   if (!existing) {
     return null;
@@ -521,27 +538,47 @@ export async function updateAdminSubmission(
   const status = input.status ?? existing.status;
   const isArchived =
     typeof input.isArchived === "boolean" ? input.isArchived : Boolean(existing.is_archived);
+  const planningCenterPersonId =
+    input.planningCenterPersonId !== undefined
+      ? input.planningCenterPersonId
+      : existing.planning_center_person_id;
 
   await env.DB.prepare(
     `
     UPDATE volunteer_submissions
-    SET status = ?, is_archived = ?, updated_at = CURRENT_TIMESTAMP
+    SET
+      status = ?,
+      is_archived = ?,
+      planning_center_person_id = ?,
+      updated_at = CURRENT_TIMESTAMP
     WHERE id = ? AND organization_id = ?
     `
   )
-    .bind(status, isArchived ? 1 : 0, submissionId, organizationId)
+    .bind(
+      status,
+      isArchived ? 1 : 0,
+      planningCenterPersonId,
+      submissionId,
+      organizationId
+    )
     .run();
 
   const updated = await env.DB.prepare(
     `
-    SELECT id, status, is_archived, updated_at
+    SELECT id, status, is_archived, planning_center_person_id, updated_at
     FROM volunteer_submissions
     WHERE id = ? AND organization_id = ?
     LIMIT 1
     `
   )
     .bind(submissionId, organizationId)
-    .first<{ id: number; status: string; is_archived: number; updated_at: string }>();
+    .first<{
+      id: number;
+      status: string;
+      is_archived: number;
+      planning_center_person_id: string | null;
+      updated_at: string;
+    }>();
 
   if (!updated) {
     return null;
@@ -551,6 +588,7 @@ export async function updateAdminSubmission(
     id: updated.id,
     status: updated.status,
     isArchived: Boolean(updated.is_archived),
+    planningCenterPersonId: updated.planning_center_person_id ?? null,
     updatedAt: updated.updated_at
   };
 }

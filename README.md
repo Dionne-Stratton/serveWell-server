@@ -75,6 +75,7 @@ Migrations live in `migrations/`:
 - `0004_seed_demo_sample_submissions.sql` — demo dashboard sample rows
 - `0005_form_sections.sql` — form sections (group headings), serving areas linked to sections
 - `0006_planning_center_integrations.sql` — org-scoped Planning Center OAuth storage (`organization_integrations`, `oauth_states`)
+- `0007_volunteer_planning_center_person_id.sql` — `volunteer_submissions.planning_center_person_id` (push/pull link to PC People)
 
 **Remote D1:** `d1:migrations:apply:remote` changes production data. Run it only when you intend to update the deployed database.
 
@@ -184,7 +185,7 @@ Request body (JSON):
 |--------|------|
 | `POST` | `/api/auth/login` → use `/api/admin/login` instead |
 | `GET` / `POST` | `/api/volunteers` → `501 NOT_IMPLEMENTED` |
-| `POST` | `/api/admin/submissions/:id/planning-center` — push volunteer to Planning Center (see API contract; not wired yet) |
+| `POST` | `/api/admin/submissions/:id/planning-center` — find or create person in People, fill SW Volunteering custom fields, optional note, set status `added_to_planning_center` |
 
 Use `/api/admin/login` for dashboard auth.
 

@@ -29,6 +29,10 @@ import {
   validateAdminNoteText
 } from "../db/adminNotes";
 import { badRequest, json, methodNotAllowed, notFound, serverError, unauthorized } from "../http/responses";
+import {
+  pushVolunteerSubmissionToPlanningCenter,
+  PushVolunteerError
+} from "../integrations/planningCenterVolunteerPush";
 import type { Env } from "../types";
 import { isOneOf, submissionStatuses } from "../validation/enums";
 
@@ -99,6 +103,20 @@ export async function adminRoutes(
     }
 
     return methodNotAllowed();
+  }
+
+  const planningCenterPushMatch = url.pathname.match(
+    /^\/api\/admin\/submissions\/(\d+)\/planning-center$/
+  );
+
+  if (planningCenterPushMatch) {
+    const submissionId = Number(planningCenterPushMatch[1]);
+
+    if (request.method !== "POST") {
+      return methodNotAllowed();
+    }
+
+    return pushSubmissionToPlanningCenter(request, env, submissionId);
   }
 
   const submissionNotesMatch = url.pathname.match(
@@ -605,6 +623,54 @@ async function deleteNote(request: Request, env: Env, noteId: number): Promise<R
   } catch (error) {
     console.error("Failed to delete admin note", error);
     return serverError("Unable to delete note.");
+  }
+}
+
+async function pushSubmissionToPlanningCenter(
+  request: Request,
+  env: Env,
+  submissionId: number
+): Promise<Response> {
+  try {
+    const auth = await requireAdmin(request, env);
+
+    if (auth.response) {
+      return auth.response;
+    }
+
+    const result = await pushVolunteerSubmissionToPlanningCenter(
+      env,
+      auth.admin!.organizationId,
+      submissionId
+    );
+
+    return json({
+      success: true,
+      data: {
+        personId: result.personId,
+        submission: {
+          id: result.submissionId,
+          status: result.status,
+          planningCenterPersonId: result.planningCenterPersonId
+        }
+      }
+    });
+  } catch (error) {
+    if (error instanceof PushVolunteerError) {
+      return json(
+        {
+          success: false,
+          error: {
+            message: error.message,
+            code: error.code
+          }
+        },
+        { status: error.status }
+      );
+    }
+
+    console.error("Failed to push submission to Planning Center", error);
+    return serverError("Unable to add this volunteer to Planning Center.");
   }
 }
 

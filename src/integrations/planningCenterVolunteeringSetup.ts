@@ -12,9 +12,9 @@ export const volunteeringFieldKeys = [
   "overall_frequency",
   "frequency_limits",
   "availability",
-  "special_events",
-  "requirements",
   "serving_areas",
+  "requirements",
+  "special_events",
   "last_synced"
 ] as const;
 
@@ -68,9 +68,9 @@ const FIELD_SPECS: FieldSpec[] = [
     sequence: 30
   },
   {
-    key: "special_events",
-    name: "Special Events",
-    dataType: "boolean",
+    key: "serving_areas",
+    name: "Serving areas",
+    dataType: "text",
     sequence: 40
   },
   {
@@ -80,9 +80,9 @@ const FIELD_SPECS: FieldSpec[] = [
     sequence: 50
   },
   {
-    key: "serving_areas",
-    name: "Serving areas",
-    dataType: "text",
+    key: "special_events",
+    name: "Special Events",
+    dataType: "boolean",
     sequence: 60
   },
   {
