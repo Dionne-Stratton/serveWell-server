@@ -1,3 +1,4 @@
+import { getAdminSessionVersion } from "../db/adminUsers";
 import { getRequiredEnv } from "../env";
 import type { AdminUser, Env } from "../types";
 
@@ -16,11 +17,18 @@ interface AdminJwtPayload {
   email: string;
   displayName: string;
   role: "admin";
+  sv: number;
   iat: number;
   exp: number;
 }
 
+export interface VerifiedAdminJwt {
+  admin: AdminUser;
+  sessionVersion: number;
+}
+
 export async function signAdminJwt(admin: AdminUser, env: Env): Promise<string> {
+  const sessionVersion = await getAdminSessionVersion(env, admin.id);
   const issuedAt = Math.floor(Date.now() / 1000);
   const payload: AdminJwtPayload = {
     sub: String(admin.id),
@@ -28,6 +36,7 @@ export async function signAdminJwt(admin: AdminUser, env: Env): Promise<string> 
     email: admin.email,
     displayName: admin.displayName,
     role: admin.role,
+    sv: sessionVersion,
     iat: issuedAt,
     exp: issuedAt + 60 * 60 * 8
   };
@@ -35,7 +44,7 @@ export async function signAdminJwt(admin: AdminUser, env: Env): Promise<string> 
   return signJwt({ alg: "HS256", typ: "JWT" }, payload, getJwtSecret(env));
 }
 
-export async function verifyAdminJwt(token: string, env: Env): Promise<AdminUser | null> {
+export async function verifyAdminJwt(token: string, env: Env): Promise<VerifiedAdminJwt | null> {
   const parts = token.split(".");
 
   if (parts.length !== 3) {
@@ -74,12 +83,20 @@ export async function verifyAdminJwt(token: string, env: Env): Promise<AdminUser
     return null;
   }
 
+  const sessionVersion =
+    typeof payload.sv === "number" && Number.isInteger(payload.sv) && payload.sv >= 0
+      ? payload.sv
+      : 0;
+
   return {
-    id,
-    organizationId: payload.organizationId,
-    email: payload.email,
-    displayName: payload.displayName,
-    role: payload.role
+    admin: {
+      id,
+      organizationId: payload.organizationId,
+      email: payload.email,
+      displayName: payload.displayName,
+      role: payload.role
+    },
+    sessionVersion
   };
 }
 

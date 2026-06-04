@@ -68,3 +68,39 @@ export async function findActiveAdminById(env: Env, id: number): Promise<AdminUs
     role: row.role
   };
 }
+
+export async function getAdminSessionVersion(env: Env, adminUserId: number): Promise<number> {
+  const row = await env.DB.prepare(
+    `
+    SELECT session_version
+    FROM admin_users
+    WHERE id = ? AND is_active = 1
+    LIMIT 1
+    `
+  )
+    .bind(adminUserId)
+    .first<{ session_version: number }>();
+
+  return row?.session_version ?? 0;
+}
+
+export async function updateAdminPasswordHash(
+  env: Env,
+  adminUserId: number,
+  passwordHash: string
+): Promise<boolean> {
+  const result = await env.DB.prepare(
+    `
+    UPDATE admin_users
+    SET
+      password_hash = ?,
+      session_version = session_version + 1,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND is_active = 1
+    `
+  )
+    .bind(passwordHash, adminUserId)
+    .run();
+
+  return (result.meta.changes ?? 0) > 0;
+}

@@ -7,3 +7,6 @@ PLANNING_CENTER_CLIENT_ID=your-id
 PLANNING_CENTER_CLIENT_SECRET=your-secret
 PLANNING_CENTER_REDIRECT_URI="[baseURL]/api/planning-center/callback"
 PLANNING_CENTER_REDIRECT_URI_LOCAL="http://localhost:8787/api/planning-center/callback"
+# Optional: password reset emails (without RESEND_API_KEY, reset links are logged in wrangler dev console)
+# RESEND_API_KEY="re_..."
+# RESEND_FROM="ServeWell <onboarding@resend.dev>"

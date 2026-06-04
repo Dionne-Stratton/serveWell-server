@@ -7,6 +7,8 @@ export interface Env {
   PLANNING_CENTER_CLIENT_SECRET?: string;
   PLANNING_CENTER_REDIRECT_URI?: string;
   PLANNING_CENTER_REDIRECT_URI_LOCAL?: string;
+  RESEND_API_KEY?: string;
+  RESEND_FROM?: string;
 }
 
 export interface ApiResponseBody<T = unknown> {

@@ -5,6 +5,7 @@ interface OrganizationRow {
   slug: string;
   name: string;
   organization_type: string;
+  contact_email: string | null;
   website_url: string | null;
 }
 
@@ -26,6 +27,7 @@ export interface Organization {
   slug: string;
   name: string;
   organizationType: string;
+  contactEmail: string | null;
   websiteUrl: string | null;
 }
 
@@ -48,7 +50,7 @@ export async function findActiveOrganizationById(
 ): Promise<Organization | null> {
   const row = await env.DB.prepare(
     `
-    SELECT id, slug, name, organization_type, website_url
+    SELECT id, slug, name, organization_type, contact_email, website_url
     FROM organizations
     WHERE id = ? AND is_active = 1
   `
@@ -65,7 +67,7 @@ export async function findActiveOrganizationBySlug(
 ): Promise<Organization | null> {
   const row = await env.DB.prepare(
     `
-    SELECT id, slug, name, organization_type, website_url
+    SELECT id, slug, name, organization_type, contact_email, website_url
     FROM organizations
     WHERE slug = ? AND is_active = 1
   `
@@ -167,7 +169,19 @@ function mapOrganization(row: OrganizationRow): Organization {
     slug: row.slug,
     name: row.name,
     organizationType: row.organization_type,
+    contactEmail: row.contact_email,
     websiteUrl: row.website_url
+  };
+}
+
+export function mapAdminSessionOrganization(organization: Organization) {
+  return {
+    id: organization.id,
+    slug: organization.slug,
+    name: organization.name,
+    organizationType: organization.organizationType,
+    contactEmail: organization.contactEmail,
+    websiteUrl: organization.websiteUrl
   };
 }
 

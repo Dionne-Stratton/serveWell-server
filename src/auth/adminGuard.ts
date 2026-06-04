@@ -1,4 +1,4 @@
-import { findActiveAdminById } from "../db/adminUsers";
+import { findActiveAdminById, getAdminSessionVersion } from "../db/adminUsers";
 import { unauthorized } from "../http/responses";
 import { getBearerToken, verifyAdminJwt } from "./jwt";
 import type { AdminUser, Env } from "../types";
@@ -15,15 +15,21 @@ export async function requireAdmin(request: Request, env: Env): Promise<AdminAut
     return { response: unauthorized() };
   }
 
-  const tokenAdmin = await verifyAdminJwt(token, env);
+  const verified = await verifyAdminJwt(token, env);
 
-  if (!tokenAdmin) {
+  if (!verified) {
     return { response: unauthorized() };
   }
 
-  const admin = await findActiveAdminById(env, tokenAdmin.id);
+  const admin = await findActiveAdminById(env, verified.admin.id);
 
   if (!admin) {
+    return { response: unauthorized() };
+  }
+
+  const currentSessionVersion = await getAdminSessionVersion(env, admin.id);
+
+  if (currentSessionVersion !== verified.sessionVersion) {
     return { response: unauthorized() };
   }
 

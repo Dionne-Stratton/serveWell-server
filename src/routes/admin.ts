@@ -2,7 +2,16 @@ import { requireAdmin } from "../auth/adminGuard";
 import { signAdminJwt } from "../auth/jwt";
 import { verifyPassword } from "../auth/passwords";
 import { findActiveAdminByEmail } from "../db/adminUsers";
-import { findActiveOrganizationById, mapPublicOrganization } from "../db/organizations";
+import {
+  findActiveOrganizationById,
+  mapAdminSessionOrganization,
+  mapPublicOrganization
+} from "../db/organizations";
+import {
+  completePasswordReset,
+  requestPasswordResetForEmail,
+  sendPasswordResetForAdmin
+} from "../auth/passwordReset";
 import { DEMO_ORGANIZATION_SLUG } from "../constants/demo";
 import {
   createAdminVolunteerForm,
@@ -57,6 +66,14 @@ export async function adminRoutes(
     }
 
     return me(request, env);
+  }
+
+  if (url.pathname === "/api/admin/request-password-reset") {
+    if (request.method !== "POST") {
+      return methodNotAllowed();
+    }
+
+    return requestPasswordResetFromProfile(request, env);
   }
 
   if (url.pathname === "/api/admin/submissions") {
@@ -245,12 +262,42 @@ async function me(request: Request, env: Env): Promise<Response> {
       success: true,
       data: {
         admin: auth.admin,
-        organization: mapPublicOrganization(organization)
+        organization: mapAdminSessionOrganization(organization)
       }
     });
   } catch (error) {
     console.error("Failed admin me lookup", error);
     return serverError("Unable to load admin profile.");
+  }
+}
+
+async function requestPasswordResetFromProfile(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  try {
+    const auth = await requireAdmin(request, env);
+
+    if (auth.response) {
+      return auth.response;
+    }
+
+    await sendPasswordResetForAdmin(
+      env,
+      auth.admin!.id,
+      auth.admin!.email,
+      auth.admin!.displayName
+    );
+
+    return json({
+      success: true,
+      data: {
+        message: "Email sent."
+      }
+    });
+  } catch (error) {
+    console.error("Failed profile password reset request", error);
+    return serverError("Unable to send password reset email.");
   }
 }
 

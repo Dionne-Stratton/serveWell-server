@@ -76,6 +76,9 @@ Migrations live in `migrations/`:
 - `0005_form_sections.sql` — form sections (group headings), serving areas linked to sections
 - `0006_planning_center_integrations.sql` — org-scoped Planning Center OAuth storage (`organization_integrations`, `oauth_states`)
 - `0007_volunteer_planning_center_person_id.sql` — `volunteer_submissions.planning_center_person_id` (push/pull link to PC People)
+- `0008_password_reset_tokens.sql` — staff password reset tokens
+
+**Password reset email:** set `RESEND_API_KEY` (and optionally `RESEND_FROM`) on the Worker. Without a key, local dev logs the reset URL to the console.
 
 **Remote D1:** `d1:migrations:apply:remote` changes production data. Run it only when you intend to update the deployed database.
 
