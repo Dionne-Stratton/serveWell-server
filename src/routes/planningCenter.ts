@@ -6,6 +6,7 @@ import {
   createPlanningCenterOAuthState,
   disconnectPlanningCenterIntegration,
   getPlanningCenterIntegration,
+  getPlanningCenterIntegrationSettings,
   mapPublicPlanningCenterIntegration,
   upsertConnectedPlanningCenterIntegration
 } from "../db/planningCenterIntegrations";
@@ -15,6 +16,10 @@ import {
   getPlanningCenterUserInfo,
   revokePlanningCenterToken
 } from "../integrations/planningCenterClient";
+import {
+  ensurePlanningCenterVolunteeringFields,
+  type PlanningCenterVolunteeringSetupState
+} from "../integrations/planningCenterVolunteeringSetup";
 import {
   createCodeChallenge,
   createRandomUrlSafeString,
@@ -173,6 +178,17 @@ async function callback(request: Request, env: Env): Promise<Response> {
     const userInfo = await getPlanningCenterUserInfo(token.access_token);
     const expiresAt = new Date(Date.now() + token.expires_in * 1000).toISOString();
 
+    const priorSettings = await getPlanningCenterIntegrationSettings(
+      env,
+      oauthState.organizationId
+    );
+    const priorVolunteering = parseVolunteeringSetupState(priorSettings?.volunteering);
+
+    const volunteering = await ensurePlanningCenterVolunteeringFields(
+      token.access_token,
+      priorVolunteering
+    );
+
     await upsertConnectedPlanningCenterIntegration(env, {
       organizationId: oauthState.organizationId,
       adminUserId: oauthState.adminUserId,
@@ -188,13 +204,21 @@ async function callback(request: Request, env: Env): Promise<Response> {
           sub: userInfo.sub,
           name: userInfo.name ?? null,
           email: userInfo.email ?? null
-        }
-      })
+        },
+        volunteering
+      }),
+      lastError: volunteering.status === "error" ? volunteering.error ?? null : null
     });
 
-    return redirectToFrontend(frontendOrigin, oauthState.redirectPath ?? "/login", {
+    const redirectParams: Record<string, string> = {
       planningCenter: "connected"
-    });
+    };
+
+    if (volunteering.status === "error") {
+      redirectParams.fieldsSetup = "error";
+    }
+
+    return redirectToFrontend(frontendOrigin, oauthState.redirectPath ?? "/login", redirectParams);
   } catch (callbackError) {
     console.error("Failed Planning Center OAuth callback", callbackError);
     return redirectToFrontend(frontendOrigin, "/login", {
@@ -264,6 +288,22 @@ function redirectToFrontend(
   }
 
   return Response.redirect(redirectUrl.toString(), 302);
+}
+
+function parseVolunteeringSetupState(
+  value: unknown
+): PlanningCenterVolunteeringSetupState | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as PlanningCenterVolunteeringSetupState;
+
+  if (record.status !== "ready" && record.status !== "error") {
+    return null;
+  }
+
+  return record;
 }
 
 function normalizeOptionalString(value: unknown): string | null {

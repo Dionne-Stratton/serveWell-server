@@ -161,6 +161,31 @@ export async function consumePlanningCenterOAuthState(
   };
 }
 
+export async function getPlanningCenterIntegrationSettings(
+  env: Env,
+  organizationId: number
+): Promise<Record<string, unknown> | null> {
+  const row = await env.DB.prepare(
+    `
+    SELECT settings_json
+    FROM organization_integrations
+    WHERE organization_id = ? AND provider = ?
+  `
+  )
+    .bind(organizationId, PLANNING_CENTER_PROVIDER)
+    .first<{ settings_json: string | null }>();
+
+  if (!row?.settings_json) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(row.settings_json) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
 export async function upsertConnectedPlanningCenterIntegration(
   env: Env,
   input: {
@@ -174,6 +199,7 @@ export async function upsertConnectedPlanningCenterIntegration(
     externalOrganizationId: string | null;
     externalOrganizationName: string | null;
     settingsJson: string;
+    lastError?: string | null;
   }
 ): Promise<PlanningCenterIntegration> {
   await env.DB.prepare(
@@ -196,7 +222,7 @@ export async function upsertConnectedPlanningCenterIntegration(
       last_error,
       updated_at
     )
-    VALUES (?, ?, 'connected', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, NULL, CURRENT_TIMESTAMP)
+    VALUES (?, ?, 'connected', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, CURRENT_TIMESTAMP)
     ON CONFLICT(organization_id, provider) DO UPDATE SET
       status = 'connected',
       display_name = excluded.display_name,
@@ -210,7 +236,7 @@ export async function upsertConnectedPlanningCenterIntegration(
       access_token_expires_at = excluded.access_token_expires_at,
       settings_json = excluded.settings_json,
       last_connected_at = CURRENT_TIMESTAMP,
-      last_error = NULL,
+      last_error = ?,
       updated_at = CURRENT_TIMESTAMP
   `
   )
@@ -226,7 +252,8 @@ export async function upsertConnectedPlanningCenterIntegration(
       input.accessTokenEncrypted,
       input.refreshTokenEncrypted,
       input.accessTokenExpiresAt,
-      input.settingsJson
+      input.settingsJson,
+      input.lastError ?? null
     )
     .run();
 

@@ -37,6 +37,8 @@ For product direction and request/response shapes, see the sibling docs in the p
 
    Set `JWT_SECRET` to a long random string for local use. `FRONTEND_ORIGIN` should match your Vite dev server (default `http://localhost:5173`).
 
+   Optional (Planning Center OAuth): set `PLANNING_CENTER_CLIENT_ID`, `PLANNING_CENTER_CLIENT_SECRET`, and `PLANNING_CENTER_REDIRECT_URI_LOCAL` (see `.dev.vars.example`). Without these, connect/disconnect routes return errors when invoked.
+
 3. **First-time only:** create a D1 database and set `database_id` in `wrangler.toml`:
 
    ```sh
@@ -72,6 +74,7 @@ Migrations live in `migrations/`:
 - `0003_seed_demo_serving_areas.sql` — demo serving areas and requirements
 - `0004_seed_demo_sample_submissions.sql` — demo dashboard sample rows
 - `0005_form_sections.sql` — form sections (group headings), serving areas linked to sections
+- `0006_planning_center_integrations.sql` — org-scoped Planning Center OAuth storage (`organization_integrations`, `oauth_states`)
 
 **Remote D1:** `d1:migrations:apply:remote` changes production data. Run it only when you intend to update the deployed database.
 
@@ -139,6 +142,21 @@ Legacy global routes (`GET /api/serving-areas`, `POST /api/volunteer-submissions
 
 Login and `/api/admin/me` include `organizationId` on the admin object and a public `organization` object (`slug`, `name`, etc.).
 
+### Admin — Planning Center integration (JWT)
+
+OAuth callback is a browser redirect (no JWT). Admin routes require `Authorization: Bearer <token>`.
+
+| Method | Path | Notes |
+|--------|------|--------|
+| `GET` | `/api/admin/integrations/planning-center` | Connection status for admin’s org |
+| `POST` | `/api/admin/integrations/planning-center/connect` | Returns `authorizationUrl` to start OAuth |
+| `POST` | `/api/admin/integrations/planning-center/disconnect` | Revokes refresh token when possible, clears integration |
+| `GET` | `/api/planning-center/callback` | OAuth redirect target; redirects to `FRONTEND_ORIGIN` with query params |
+
+Requires migration `0006` and Planning Center app credentials in Worker secrets / `.dev.vars`.
+
+On successful OAuth connect, the server ensures a People tab **SW Volunteering** and custom fields (Overall Frequency, Frequency Limits, Availability, Special Events, Requirements, Serving areas, Last synced). IDs are stored in `organization_integrations.settings_json` under `volunteering`. If setup fails, connect still completes and the admin redirect includes `fieldsSetup=error`.
+
 ### Church signup (public)
 
 Creates an **organization profile**, the **first admin user**, and a **default volunteer form** (`general-serving`) with serving areas and requirements from the `church_volunteer_default` template (same baseline as the demo form).
@@ -166,6 +184,7 @@ Request body (JSON):
 |--------|------|
 | `POST` | `/api/auth/login` → use `/api/admin/login` instead |
 | `GET` / `POST` | `/api/volunteers` → `501 NOT_IMPLEMENTED` |
+| `POST` | `/api/admin/submissions/:id/planning-center` — push volunteer to Planning Center (see API contract; not wired yet) |
 
 Use `/api/admin/login` for dashboard auth.
 
