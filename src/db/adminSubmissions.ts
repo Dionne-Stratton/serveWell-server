@@ -4,6 +4,12 @@ import {
   requirementsPendingStatusFilterValues,
 } from "../lib/submissionStatus";
 
+export interface AdminActorSummary {
+  id: number;
+  displayName: string;
+  email: string;
+}
+
 export interface AdminSubmissionStaffNote {
   id: number;
   note: string;
@@ -50,8 +56,11 @@ export interface AdminSubmissionDetail {
     status: string;
     isArchived: boolean;
     planningCenterPersonId: string | null;
+    planningCenterSyncedAt: string | null;
+    planningCenterSyncedBy: AdminActorSummary | null;
     createdAt: string;
     updatedAt: string;
+    updatedBy: AdminActorSummary | null;
   };
   interests: Array<{
     id: number;
@@ -93,8 +102,23 @@ export interface AdminSubmissionFilters {
 export interface UpdateAdminSubmissionInput {
   status?: string;
   isArchived?: boolean;
-  /** Set when pushing or linking from Planning Center (not exposed on public PATCH). */
-  planningCenterPersonId?: string;
+}
+
+export interface RecordPlanningCenterSyncInput {
+  planningCenterPersonId: string;
+  syncedByAdminUserId: number;
+  syncedAt?: string;
+}
+
+export interface AdminSubmissionMutationResult {
+  id: number;
+  status: string;
+  isArchived: boolean;
+  planningCenterPersonId: string | null;
+  planningCenterSyncedAt: string | null;
+  planningCenterSyncedBy: AdminActorSummary | null;
+  updatedAt: string;
+  updatedBy: AdminActorSummary | null;
 }
 
 interface AdminSubmissionRow {
@@ -134,6 +158,13 @@ interface AdminSubmissionDetailRow {
   status: string;
   is_archived: number;
   planning_center_person_id: string | null;
+  planning_center_synced_at: string | null;
+  planning_center_synced_by_admin_user_id: number | null;
+  updated_by_admin_user_id: number | null;
+  updated_by_display_name: string | null;
+  updated_by_email: string | null;
+  pc_synced_by_display_name: string | null;
+  pc_synced_by_email: string | null;
   created_at: string;
   updated_at: string;
   availability: string | null;
@@ -305,12 +336,23 @@ export async function getAdminSubmissionDetail(
       vs.status,
       vs.is_archived,
       vs.planning_center_person_id,
+      vs.planning_center_synced_at,
+      vs.planning_center_synced_by_admin_user_id,
+      vs.updated_by_admin_user_id,
+      updated_admin.display_name AS updated_by_display_name,
+      updated_admin.email AS updated_by_email,
+      pc_sync_admin.display_name AS pc_synced_by_display_name,
+      pc_sync_admin.email AS pc_synced_by_email,
       vs.created_at,
       vs.updated_at,
       GROUP_CONCAT(DISTINCT va.availability_key) AS availability
     FROM volunteer_submissions vs
     INNER JOIN volunteer_forms vf
       ON vf.id = vs.form_id
+    LEFT JOIN admin_users updated_admin
+      ON updated_admin.id = vs.updated_by_admin_user_id
+    LEFT JOIN admin_users pc_sync_admin
+      ON pc_sync_admin.id = vs.planning_center_synced_by_admin_user_id
     LEFT JOIN volunteer_availability va
       ON va.submission_id = vs.id
     WHERE vs.id = ?${organizationClause}
@@ -354,8 +396,19 @@ export async function getAdminSubmissionDetail(
       status: normalizeSubmissionStatus(submission.status),
       isArchived: Boolean(submission.is_archived),
       planningCenterPersonId: submission.planning_center_person_id ?? null,
+      planningCenterSyncedAt: submission.planning_center_synced_at ?? null,
+      planningCenterSyncedBy: mapAdminActorFromJoin(
+        submission.planning_center_synced_by_admin_user_id,
+        submission.pc_synced_by_display_name,
+        submission.pc_synced_by_email
+      ),
       createdAt: submission.created_at,
       updatedAt: submission.updated_at,
+      updatedBy: mapAdminActorFromJoin(
+        submission.updated_by_admin_user_id,
+        submission.updated_by_display_name,
+        submission.updated_by_email
+      ),
     },
     interests,
     requirementConfirmations: confirmations,
@@ -503,21 +556,71 @@ async function listAdminNotes(
   }));
 }
 
+export async function touchSubmissionAdminActivity(
+  env: Env,
+  submissionId: number,
+  organizationId: number,
+  adminUserId: number
+): Promise<boolean> {
+  const result = await env.DB.prepare(
+    `
+    UPDATE volunteer_submissions
+    SET
+      updated_at = CURRENT_TIMESTAMP,
+      updated_by_admin_user_id = ?
+    WHERE id = ? AND organization_id = ?
+    `
+  )
+    .bind(adminUserId, submissionId, organizationId)
+    .run();
+
+  return (result.meta.changes ?? 0) > 0;
+}
+
+export async function recordPlanningCenterSync(
+  env: Env,
+  submissionId: number,
+  organizationId: number,
+  input: RecordPlanningCenterSyncInput
+): Promise<AdminSubmissionMutationResult | null> {
+  const syncedAt = input.syncedAt ?? new Date().toISOString();
+
+  const result = await env.DB.prepare(
+    `
+    UPDATE volunteer_submissions
+    SET
+      planning_center_person_id = ?,
+      planning_center_synced_at = ?,
+      planning_center_synced_by_admin_user_id = ?
+    WHERE id = ? AND organization_id = ?
+    `
+  )
+    .bind(
+      input.planningCenterPersonId,
+      syncedAt,
+      input.syncedByAdminUserId,
+      submissionId,
+      organizationId
+    )
+    .run();
+
+  if ((result.meta.changes ?? 0) === 0) {
+    return null;
+  }
+
+  return getAdminSubmissionMutationResult(env, submissionId, organizationId);
+}
+
 export async function updateAdminSubmission(
   env: Env,
   submissionId: number,
   organizationId: number,
-  input: UpdateAdminSubmissionInput
-): Promise<{
-  id: number;
-  status: string;
-  isArchived: boolean;
-  planningCenterPersonId: string | null;
-  updatedAt: string;
-} | null> {
+  input: UpdateAdminSubmissionInput,
+  adminUserId: number
+): Promise<AdminSubmissionMutationResult | null> {
   const existing = await env.DB.prepare(
     `
-    SELECT id, status, is_archived, planning_center_person_id
+    SELECT id, status, is_archived
     FROM volunteer_submissions
     WHERE id = ? AND organization_id = ?
     LIMIT 1
@@ -528,7 +631,6 @@ export async function updateAdminSubmission(
       id: number;
       status: string;
       is_archived: number;
-      planning_center_person_id: string | null;
     }>();
 
   if (!existing) {
@@ -538,10 +640,13 @@ export async function updateAdminSubmission(
   const status = input.status ?? existing.status;
   const isArchived =
     typeof input.isArchived === "boolean" ? input.isArchived : Boolean(existing.is_archived);
-  const planningCenterPersonId =
-    input.planningCenterPersonId !== undefined
-      ? input.planningCenterPersonId
-      : existing.planning_center_person_id;
+  const statusChanged = input.status !== undefined && input.status !== existing.status;
+  const archiveChanged =
+    input.isArchived !== undefined && isArchived !== Boolean(existing.is_archived);
+
+  if (!statusChanged && !archiveChanged) {
+    return getAdminSubmissionMutationResult(env, submissionId, organizationId);
+  }
 
   await env.DB.prepare(
     `
@@ -549,25 +654,43 @@ export async function updateAdminSubmission(
     SET
       status = ?,
       is_archived = ?,
-      planning_center_person_id = ?,
-      updated_at = CURRENT_TIMESTAMP
+      updated_at = CURRENT_TIMESTAMP,
+      updated_by_admin_user_id = ?
     WHERE id = ? AND organization_id = ?
     `
   )
-    .bind(
-      status,
-      isArchived ? 1 : 0,
-      planningCenterPersonId,
-      submissionId,
-      organizationId
-    )
+    .bind(status, isArchived ? 1 : 0, adminUserId, submissionId, organizationId)
     .run();
 
+  return getAdminSubmissionMutationResult(env, submissionId, organizationId);
+}
+
+async function getAdminSubmissionMutationResult(
+  env: Env,
+  submissionId: number,
+  organizationId: number
+): Promise<AdminSubmissionMutationResult | null> {
   const updated = await env.DB.prepare(
     `
-    SELECT id, status, is_archived, planning_center_person_id, updated_at
-    FROM volunteer_submissions
-    WHERE id = ? AND organization_id = ?
+    SELECT
+      vs.id,
+      vs.status,
+      vs.is_archived,
+      vs.planning_center_person_id,
+      vs.planning_center_synced_at,
+      vs.planning_center_synced_by_admin_user_id,
+      vs.updated_at,
+      vs.updated_by_admin_user_id,
+      updated_admin.display_name AS updated_by_display_name,
+      updated_admin.email AS updated_by_email,
+      pc_sync_admin.display_name AS pc_synced_by_display_name,
+      pc_sync_admin.email AS pc_synced_by_email
+    FROM volunteer_submissions vs
+    LEFT JOIN admin_users updated_admin
+      ON updated_admin.id = vs.updated_by_admin_user_id
+    LEFT JOIN admin_users pc_sync_admin
+      ON pc_sync_admin.id = vs.planning_center_synced_by_admin_user_id
+    WHERE vs.id = ? AND vs.organization_id = ?
     LIMIT 1
     `
   )
@@ -577,7 +700,14 @@ export async function updateAdminSubmission(
       status: string;
       is_archived: number;
       planning_center_person_id: string | null;
+      planning_center_synced_at: string | null;
+      planning_center_synced_by_admin_user_id: number | null;
       updated_at: string;
+      updated_by_admin_user_id: number | null;
+      updated_by_display_name: string | null;
+      updated_by_email: string | null;
+      pc_synced_by_display_name: string | null;
+      pc_synced_by_email: string | null;
     }>();
 
   if (!updated) {
@@ -586,10 +716,37 @@ export async function updateAdminSubmission(
 
   return {
     id: updated.id,
-    status: updated.status,
+    status: normalizeSubmissionStatus(updated.status),
     isArchived: Boolean(updated.is_archived),
     planningCenterPersonId: updated.planning_center_person_id ?? null,
-    updatedAt: updated.updated_at
+    planningCenterSyncedAt: updated.planning_center_synced_at ?? null,
+    planningCenterSyncedBy: mapAdminActorFromJoin(
+      updated.planning_center_synced_by_admin_user_id,
+      updated.pc_synced_by_display_name,
+      updated.pc_synced_by_email
+    ),
+    updatedAt: updated.updated_at,
+    updatedBy: mapAdminActorFromJoin(
+      updated.updated_by_admin_user_id,
+      updated.updated_by_display_name,
+      updated.updated_by_email
+    )
+  };
+}
+
+function mapAdminActorFromJoin(
+  adminUserId: number | null,
+  displayName: string | null,
+  email: string | null
+): AdminActorSummary | null {
+  if (!adminUserId || !email) {
+    return null;
+  }
+
+  return {
+    id: adminUserId,
+    displayName: displayName?.trim() || email,
+    email
   };
 }
 

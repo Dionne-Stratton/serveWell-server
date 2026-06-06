@@ -79,6 +79,7 @@ Migrations live in `migrations/`:
 - `0008_password_reset_tokens.sql` — staff password reset tokens
 - `0009_admin_session_version.sql` — JWT session invalidation on password change
 - `0010_multi_admin_invites.sql` — `owner` role, `admin_invites` for team invites
+- `0011_submission_updated_by_planning_center_sync.sql` — `updated_by_admin_user_id`, PC sync metadata; drops `added_to_planning_center` status
 
 **Password reset email:** set `RESEND_API_KEY` (and optionally `RESEND_FROM`) on the Worker. Without a key, local dev logs the reset URL to the console.
 

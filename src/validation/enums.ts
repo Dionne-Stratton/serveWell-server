@@ -28,7 +28,6 @@ export const submissionStatuses = [
   "contacted",
   "requirements_pending",
   "approved_ready_to_schedule",
-  "added_to_planning_center",
   "archived_inactive",
   "not_a_fit"
 ] as const;

@@ -6,10 +6,17 @@ const LEGACY_REQUIREMENTS_PENDING = [
 
 export const REQUIREMENTS_PENDING_STATUS = "requirements_pending";
 
+const LEGACY_ADDED_TO_PLANNING_CENTER = "added_to_planning_center";
+
 export function normalizeSubmissionStatus(status: string): string {
   if ((LEGACY_REQUIREMENTS_PENDING as readonly string[]).includes(status)) {
     return REQUIREMENTS_PENDING_STATUS;
   }
+
+  if (status === LEGACY_ADDED_TO_PLANNING_CENTER) {
+    return "approved_ready_to_schedule";
+  }
+
   return status;
 }
 

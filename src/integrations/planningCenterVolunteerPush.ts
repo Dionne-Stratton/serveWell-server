@@ -1,4 +1,8 @@
-import { getAdminSubmissionDetail, updateAdminSubmission } from "../db/adminSubmissions";
+import {
+  getAdminSubmissionDetail,
+  recordPlanningCenterSync,
+  type AdminActorSummary
+} from "../db/adminSubmissions";
 import {
   getPlanningCenterIntegrationSettings,
   updatePlanningCenterIntegrationSettings
@@ -34,13 +38,16 @@ export interface PushVolunteerToPlanningCenterResult {
   personId: string;
   submissionId: number;
   status: string;
-  planningCenterPersonId: string | null;
+  planningCenterPersonId: string;
+  planningCenterSyncedAt: string;
+  planningCenterSyncedBy: AdminActorSummary;
 }
 
 export async function pushVolunteerSubmissionToPlanningCenter(
   env: Env,
   organizationId: number,
-  submissionId: number
+  submissionId: number,
+  syncedByAdminUserId: number
 ): Promise<PushVolunteerToPlanningCenterResult> {
   const detail = await getAdminSubmissionDetail(env, submissionId, organizationId);
 
@@ -159,23 +166,13 @@ export async function pushVolunteerSubmissionToPlanningCenter(
     throw error;
   }
 
-  const updatePayload: {
-    status?: string;
-    planningCenterPersonId: string;
-  } = { planningCenterPersonId: personId };
+  const updated = await recordPlanningCenterSync(env, submissionId, organizationId, {
+    planningCenterPersonId: personId,
+    syncedByAdminUserId,
+    syncedAt
+  });
 
-  if (!detail.submission.planningCenterPersonId) {
-    updatePayload.status = "added_to_planning_center";
-  }
-
-  const updated = await updateAdminSubmission(
-    env,
-    submissionId,
-    organizationId,
-    updatePayload
-  );
-
-  if (!updated) {
+  if (!updated || !updated.planningCenterSyncedBy || !updated.planningCenterSyncedAt) {
     throw new PushVolunteerError("Submission not found.", "NOT_FOUND", 404);
   }
 
@@ -183,7 +180,9 @@ export async function pushVolunteerSubmissionToPlanningCenter(
     personId,
     submissionId,
     status: updated.status,
-    planningCenterPersonId: updated.planningCenterPersonId
+    planningCenterPersonId: personId,
+    planningCenterSyncedAt: updated.planningCenterSyncedAt,
+    planningCenterSyncedBy: updated.planningCenterSyncedBy
   };
 }
 

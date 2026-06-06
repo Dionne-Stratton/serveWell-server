@@ -30,6 +30,7 @@ import {
   deleteAdminSubmission,
   getAdminSubmissionDetail,
   listAdminSubmissions,
+  touchSubmissionAdminActivity,
   updateAdminSubmission
 } from "../db/adminSubmissions";
 import {
@@ -603,7 +604,8 @@ async function patchSubmission(
       env,
       submissionId,
       auth.admin!.organizationId,
-      updateInput
+      updateInput,
+      auth.admin!.id
     );
 
     if (!updated) {
@@ -664,6 +666,13 @@ async function postSubmissionNote(
       return notFound();
     }
 
+    await touchSubmissionAdminActivity(
+      env,
+      submissionId,
+      auth.admin!.organizationId,
+      auth.admin!.id
+    );
+
     return json(
       {
         success: true,
@@ -720,7 +729,8 @@ async function pushSubmissionToPlanningCenter(
     const result = await pushVolunteerSubmissionToPlanningCenter(
       env,
       auth.admin!.organizationId,
-      submissionId
+      submissionId,
+      auth.admin!.id
     );
 
     return json({
@@ -730,7 +740,9 @@ async function pushSubmissionToPlanningCenter(
         submission: {
           id: result.submissionId,
           status: result.status,
-          planningCenterPersonId: result.planningCenterPersonId
+          planningCenterPersonId: result.planningCenterPersonId,
+          planningCenterSyncedAt: result.planningCenterSyncedAt,
+          planningCenterSyncedBy: result.planningCenterSyncedBy
         }
       }
     });

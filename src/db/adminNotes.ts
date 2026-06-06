@@ -116,7 +116,22 @@ export async function deleteAdminNote(
   env: Env,
   noteId: number,
   organizationId: number
-): Promise<boolean> {
+): Promise<{ deleted: boolean; submissionId: number | null }> {
+  const existing = await env.DB.prepare(
+    `
+    SELECT submission_id
+    FROM admin_notes
+    WHERE id = ? AND organization_id = ?
+    LIMIT 1
+    `
+  )
+    .bind(noteId, organizationId)
+    .first<{ submission_id: number }>();
+
+  if (!existing) {
+    return { deleted: false, submissionId: null };
+  }
+
   const result = await env.DB.prepare(
     `
     DELETE FROM admin_notes
@@ -126,5 +141,8 @@ export async function deleteAdminNote(
     .bind(noteId, organizationId)
     .run();
 
-  return (result.meta.changes ?? 0) > 0;
+  return {
+    deleted: (result.meta.changes ?? 0) > 0,
+    submissionId: existing.submission_id
+  };
 }
