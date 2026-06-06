@@ -370,7 +370,8 @@ export function mapPublicPlanningCenterIntegration(
       status: "not_connected",
       displayName: DISPLAY_NAME,
       externalOrganizationName: null,
-      lastConnectedAt: null
+      lastConnectedAt: null,
+      tokenUsable: false
     };
   }
 
@@ -383,7 +384,8 @@ export function mapPublicPlanningCenterIntegration(
     scope: integration.scope,
     accessTokenExpiresAt: integration.accessTokenExpiresAt,
     lastConnectedAt: integration.lastConnectedAt,
-    lastError: integration.lastError
+    lastError: integration.lastError,
+    tokenUsable: false
   };
 }
 

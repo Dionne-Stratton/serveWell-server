@@ -17,6 +17,7 @@ import {
   getPlanningCenterUserInfo,
   revokePlanningCenterToken
 } from "../integrations/planningCenterClient";
+import { getPlanningCenterAccessToken } from "../integrations/planningCenterAccess";
 import { ensureOrganizationPlanningCenterFormTabsOnConnect } from "../integrations/planningCenterFormTabs";
 import {
   createCodeChallenge,
@@ -77,12 +78,20 @@ async function getStatus(request: Request, env: Env): Promise<Response> {
       return auth.response;
     }
 
-    const integration = await getPlanningCenterIntegration(env, auth.admin!.organizationId);
+    const organizationId = auth.admin!.organizationId;
+    const integration = await getPlanningCenterIntegration(env, organizationId);
+    const publicIntegration = mapPublicPlanningCenterIntegration(integration);
+
+    if (integration?.status === "connected") {
+      publicIntegration.tokenUsable = Boolean(
+        await getPlanningCenterAccessToken(env, organizationId)
+      );
+    }
 
     return json({
       success: true,
       data: {
-        integration: mapPublicPlanningCenterIntegration(integration)
+        integration: publicIntegration
       }
     });
   } catch (error) {
