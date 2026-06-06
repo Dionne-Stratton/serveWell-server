@@ -1,4 +1,5 @@
 import { requireAdmin } from "../auth/adminGuard";
+import { requireOwner } from "../auth/adminOwnerGuard";
 import { getFrontendOrigin } from "../env";
 import { findActiveOrganizationById } from "../db/organizations";
 import {
@@ -92,7 +93,7 @@ async function getStatus(request: Request, env: Env): Promise<Response> {
 
 async function connect(request: Request, env: Env): Promise<Response> {
   try {
-    const auth = await requireAdmin(request, env);
+    const auth = await requireOwner(request, env);
 
     if (auth.response) {
       return auth.response;
@@ -230,7 +231,7 @@ async function callback(request: Request, env: Env): Promise<Response> {
 
 async function disconnect(request: Request, env: Env): Promise<Response> {
   try {
-    const auth = await requireAdmin(request, env);
+    const auth = await requireOwner(request, env);
 
     if (auth.response) {
       return auth.response;

@@ -160,9 +160,9 @@ OAuth callback is a browser redirect (no JWT). Admin routes require `Authorizati
 
 | Method | Path | Notes |
 |--------|------|--------|
-| `GET` | `/api/admin/integrations/planning-center` | Connection status for admin’s org |
-| `POST` | `/api/admin/integrations/planning-center/connect` | Returns `authorizationUrl` to start OAuth |
-| `POST` | `/api/admin/integrations/planning-center/disconnect` | Revokes refresh token when possible, clears integration |
+| `GET` | `/api/admin/integrations/planning-center` | Connection status for admin’s org (any admin) |
+| `POST` | `/api/admin/integrations/planning-center/connect` | **Owner only** — returns `authorizationUrl` to start OAuth |
+| `POST` | `/api/admin/integrations/planning-center/disconnect` | **Owner only** — revokes refresh token when possible, clears integration |
 | `GET` | `/api/planning-center/callback` | OAuth redirect target; redirects to `FRONTEND_ORIGIN` with query params |
 
 Requires migration `0006` and Planning Center app credentials in Worker secrets / `.dev.vars`.
