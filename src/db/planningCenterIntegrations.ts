@@ -282,6 +282,62 @@ export async function upsertConnectedPlanningCenterIntegration(
   return integration;
 }
 
+export async function updatePlanningCenterAccessTokens(
+  env: Env,
+  organizationId: number,
+  input: {
+    accessTokenEncrypted: string;
+    refreshTokenEncrypted?: string;
+    accessTokenExpiresAt: string;
+  }
+): Promise<void> {
+  if (input.refreshTokenEncrypted) {
+    await env.DB.prepare(
+      `
+      UPDATE organization_integrations
+      SET
+        access_token_encrypted = ?,
+        refresh_token_encrypted = ?,
+        access_token_expires_at = ?,
+        status = 'connected',
+        last_error = NULL,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE organization_id = ? AND provider = ?
+      `
+    )
+      .bind(
+        input.accessTokenEncrypted,
+        input.refreshTokenEncrypted,
+        input.accessTokenExpiresAt,
+        organizationId,
+        PLANNING_CENTER_PROVIDER
+      )
+      .run();
+
+    return;
+  }
+
+  await env.DB.prepare(
+    `
+    UPDATE organization_integrations
+    SET
+      access_token_encrypted = ?,
+      access_token_expires_at = ?,
+      status = 'connected',
+      last_error = NULL,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE organization_id = ? AND provider = ?
+    `
+  )
+    .bind(
+      input.accessTokenEncrypted,
+      input.accessTokenExpiresAt,
+      organizationId,
+      PLANNING_CENTER_PROVIDER
+    )
+    .run();
+}
+
 export async function disconnectPlanningCenterIntegration(
   env: Env,
   organizationId: number

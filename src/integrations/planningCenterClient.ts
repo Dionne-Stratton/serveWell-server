@@ -73,6 +73,25 @@ export async function exchangePlanningCenterCode(input: {
   return parsePlanningCenterResponse<PlanningCenterTokenResponse>(response);
 }
 
+export async function refreshPlanningCenterAccessToken(input: {
+  env: Env;
+  refreshToken: string;
+}): Promise<PlanningCenterTokenResponse> {
+  const body = new FormData();
+  body.set("grant_type", "refresh_token");
+  body.set("refresh_token", input.refreshToken);
+  body.set("client_id", getRequiredEnv(input.env, "PLANNING_CENTER_CLIENT_ID"));
+  body.set("client_secret", getRequiredEnv(input.env, "PLANNING_CENTER_CLIENT_SECRET"));
+
+  const response = await fetch(TOKEN_URL, {
+    method: "POST",
+    headers: planningCenterHeaders(),
+    body
+  });
+
+  return parsePlanningCenterResponse<PlanningCenterTokenResponse>(response);
+}
+
 export async function getPlanningCenterUserInfo(
   accessToken: string
 ): Promise<PlanningCenterUserInfo> {
