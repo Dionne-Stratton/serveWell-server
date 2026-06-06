@@ -62,6 +62,18 @@ export async function authRoutes(
     return resetPassword(request, env);
   }
 
+  if (url.pathname === "/api/auth/accept-invite") {
+    if (request.method === "GET") {
+      return previewInvite(request, env);
+    }
+
+    if (request.method === "POST") {
+      return acceptInvite(request, env);
+    }
+
+    return methodNotAllowed();
+  }
+
   return json(
     { success: false, error: { message: "Not found.", code: "NOT_FOUND" } },
     { status: 404 }

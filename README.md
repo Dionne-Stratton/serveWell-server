@@ -123,12 +123,18 @@ Legacy global routes (`GET /api/serving-areas`, `POST /api/volunteer-submissions
 
 | Method | Path | Notes |
 |--------|------|--------|
-| `POST` | `/api/admin/login` | Returns `token`, `admin`, `organization` |
+| `POST` | `/api/admin/login` | Body: `organizationSlug`, `email`, `password` → `token`, `admin`, `organization` |
 | `GET` | `/api/admin/me` | Current admin + organization |
+| `POST` | `/api/admin/request-password-reset` | Authenticated; emails reset link to signed-in admin |
+| `GET` | `/api/admin/team` | Members + pending invites; `canManage` when role is `owner` |
+| `POST` | `/api/admin/team/invites` | Owner only; invite admin by email (7-day token, Resend) |
+| `DELETE` | `/api/admin/team/invites/:inviteId` | Owner only; revoke pending invite |
+| `DELETE` | `/api/admin/team/members/:adminUserId` | Owner only; deactivate admin (not owner, not self) |
 | `GET` | `/api/admin/submissions` | List for authenticated admin’s org; query: `formId`, `status`, `archived`, `servingAreaId`, `search` |
 | `GET` | `/api/admin/submissions/:id` | Detail; must belong to admin’s org |
 | `PATCH` | `/api/admin/submissions/:id` | Update admin fields (e.g. status, archive) |
-| `DELETE` | `/api/admin/submissions/:id` | Delete submission in org (demo/test cleanup) |
+| `DELETE` | `/api/admin/submissions/:id` | Permanent delete in ServeWell only (not Planning Center) |
+| `POST` | `/api/admin/submissions/:id/planning-center` | Push/sync submission to PC People (per-form tab in `formTabs`) |
 | `POST` | `/api/admin/submissions/:id/notes` | Add staff-only note to a submission |
 | `DELETE` | `/api/admin/notes/:noteId` | Delete a note in the authenticated admin’s org |
 | `GET` | `/api/admin/forms` | List volunteer forms for the admin’s org |
@@ -170,6 +176,10 @@ Creates an **organization profile**, the **first admin user**, and a **default v
 | Method | Path | Notes |
 |--------|------|--------|
 | `POST` | `/api/auth/register` | Returns `201` with `token`, `admin`, `organization` (same shape as login) |
+| `POST` | `/api/auth/forgot-password` | Body: `organizationSlug`, `email` (generic success message) |
+| `POST` | `/api/auth/reset-password` | Body: `token`, `newPassword` |
+| `GET` | `/api/auth/accept-invite?token=` | Preview invite (org name, email) |
+| `POST` | `/api/auth/accept-invite` | Body: `token`, `newPassword`, `confirmPassword` → login payload |
 
 Request body (JSON):
 
@@ -180,7 +190,7 @@ Request body (JSON):
 | `organizationType` | no | `church` (default), `ministry`, or `other` |
 | `contactEmail` | no | Defaults to `adminEmail` if omitted |
 | `websiteUrl` | no | `http` or `https` |
-| `adminEmail` | yes | Staff login email (unique across the app) |
+| `adminEmail` | yes | Staff login email (unique per organization; same email may exist in other orgs) |
 | `adminPassword` | yes | At least 8 characters |
 | `adminDisplayName` | yes | Shown in admin UI |
 
@@ -190,9 +200,8 @@ Request body (JSON):
 |--------|------|
 | `POST` | `/api/auth/login` → use `/api/admin/login` instead |
 | `GET` / `POST` | `/api/volunteers` → `501 NOT_IMPLEMENTED` |
-| `POST` | `/api/admin/submissions/:id/planning-center` — find or create person in People, fill SW Volunteering custom fields, optional note, set status `added_to_planning_center` |
 
-Use `/api/admin/login` for dashboard auth.
+Use `/api/admin/login` for dashboard auth (`organizationSlug` + email + password).
 
 ## Local smoke tests
 
