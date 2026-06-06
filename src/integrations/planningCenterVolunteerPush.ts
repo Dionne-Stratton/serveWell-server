@@ -1,8 +1,12 @@
 import { getAdminSubmissionDetail, updateAdminSubmission } from "../db/adminSubmissions";
 import {
   getPlanningCenterIntegrationSettings,
-  updatePlanningCenterIntegrationVolunteeringSettings
+  updatePlanningCenterIntegrationSettings
 } from "../db/planningCenterIntegrations";
+import {
+  parsePlanningCenterFormTabsSettings,
+  type PlanningCenterFormTabsSettings
+} from "./planningCenterFormTabs";
 import type { Env } from "../types";
 import { getPlanningCenterAccessToken } from "./planningCenterAccess";
 import { PlanningCenterApiError } from "./planningCenterPeopleApi";
@@ -21,6 +25,7 @@ import {
 } from "./planningCenterVolunteerFieldValues";
 import {
   ensurePlanningCenterVolunteeringFields,
+  planningCenterTabNameForForm,
   type PlanningCenterVolunteeringSetupState,
   type VolunteeringFieldKey
 } from "./planningCenterVolunteeringSetup";
@@ -64,20 +69,34 @@ export async function pushVolunteerSubmissionToPlanningCenter(
     );
   }
 
-  const settings = await getPlanningCenterIntegrationSettings(env, organizationId);
-  let volunteering: PlanningCenterVolunteeringSetupState | null = parseVolunteeringSetupState(
-    settings?.volunteering
-  );
+  const settings = (await getPlanningCenterIntegrationSettings(env, organizationId)) ?? {};
+  const formId = detail.submission.formId;
+  const formName = detail.submission.formName ?? "Volunteer form";
+  const formTabs = parsePlanningCenterFormTabsSettings(settings);
+  const formTabKey = String(formId);
+  let volunteering: PlanningCenterVolunteeringSetupState | null = formTabs[formTabKey] ?? null;
 
+  const tabName = planningCenterTabNameForForm(formName);
   const needsFieldSetup =
     !volunteering || volunteering.status !== "ready" || !volunteering.fields?.overall_frequency;
 
   if (needsFieldSetup) {
-    const ensured = await ensurePlanningCenterVolunteeringFields(accessToken, volunteering);
+    const ensured = await ensurePlanningCenterVolunteeringFields(
+      accessToken,
+      tabName,
+      volunteering
+    );
     volunteering = ensured;
 
     if (ensured.status === "ready") {
-      await updatePlanningCenterIntegrationVolunteeringSettings(env, organizationId, ensured);
+      const nextFormTabs: PlanningCenterFormTabsSettings = {
+        ...formTabs,
+        [formTabKey]: ensured
+      };
+      await updatePlanningCenterIntegrationSettings(env, organizationId, {
+        ...settings,
+        formTabs: nextFormTabs
+      });
     }
   }
 
@@ -197,22 +216,6 @@ async function writeVolunteeringFields(
 
     await upsertPersonFieldValue(accessToken, personId, fieldDefinitionId, value);
   }
-}
-
-function parseVolunteeringSetupState(
-  value: unknown
-): PlanningCenterVolunteeringSetupState | null {
-  if (!value || typeof value !== "object") {
-    return null;
-  }
-
-  const record = value as PlanningCenterVolunteeringSetupState;
-
-  if (record.status !== "ready" && record.status !== "error") {
-    return null;
-  }
-
-  return record;
 }
 
 export class PushVolunteerError extends Error {

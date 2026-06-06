@@ -6,7 +6,10 @@ import {
   PlanningCenterApiError
 } from "./planningCenterPeopleApi";
 
-export const PLANNING_CENTER_VOLUNTEERING_TAB_NAME = "SW Volunteering";
+export function planningCenterTabNameForForm(formName: string): string {
+  const trimmed = formName.trim();
+  return trimmed ? `SW: ${trimmed}` : "SW: Volunteer form";
+}
 
 export const volunteeringFieldKeys = [
   "overall_frequency",
@@ -95,10 +98,11 @@ const FIELD_SPECS: FieldSpec[] = [
 
 export async function ensurePlanningCenterVolunteeringFields(
   accessToken: string,
+  tabName: string,
   existing?: PlanningCenterVolunteeringSetupState | null
 ): Promise<PlanningCenterVolunteeringSetupState> {
   try {
-    const tabId = await ensureTab(accessToken, existing?.tabId);
+    const tabId = await ensureTab(accessToken, tabName.trim(), existing?.tabId);
     const fields: Partial<Record<VolunteeringFieldKey, string>> = {
       ...(existing?.fields ?? {})
     };
@@ -144,7 +148,11 @@ export async function ensurePlanningCenterVolunteeringFields(
   }
 }
 
-async function ensureTab(accessToken: string, knownTabId?: string): Promise<string> {
+async function ensureTab(
+  accessToken: string,
+  tabName: string,
+  knownTabId?: string
+): Promise<string> {
   if (knownTabId) {
     try {
       await listAllPeopleResources(accessToken, `/tabs/${knownTabId}/field_definitions`);
@@ -155,15 +163,13 @@ async function ensureTab(accessToken: string, knownTabId?: string): Promise<stri
   }
 
   const tabs = await listAllPeopleResources<{ name: string }>(accessToken, "/tabs");
-  const existing = tabs.find(
-    (tab) => tab.attributes.name?.trim() === PLANNING_CENTER_VOLUNTEERING_TAB_NAME
-  );
+  const existing = tabs.find((tab) => tab.attributes.name?.trim() === tabName);
 
   if (existing) {
     return existing.id;
   }
 
-  const created = await createTab(accessToken, PLANNING_CENTER_VOLUNTEERING_TAB_NAME);
+  const created = await createTab(accessToken, tabName);
   return created.id;
 }
 

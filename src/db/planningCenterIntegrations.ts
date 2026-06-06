@@ -161,14 +161,11 @@ export async function consumePlanningCenterOAuthState(
   };
 }
 
-export async function updatePlanningCenterIntegrationVolunteeringSettings(
+export async function updatePlanningCenterIntegrationSettings(
   env: Env,
   organizationId: number,
-  volunteering: unknown
+  settings: Record<string, unknown>
 ): Promise<void> {
-  const settings = (await getPlanningCenterIntegrationSettings(env, organizationId)) ?? {};
-  settings.volunteering = volunteering;
-
   await env.DB.prepare(
     `
     UPDATE organization_integrations

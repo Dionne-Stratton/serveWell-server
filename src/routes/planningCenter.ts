@@ -16,10 +16,7 @@ import {
   getPlanningCenterUserInfo,
   revokePlanningCenterToken
 } from "../integrations/planningCenterClient";
-import {
-  ensurePlanningCenterVolunteeringFields,
-  type PlanningCenterVolunteeringSetupState
-} from "../integrations/planningCenterVolunteeringSetup";
+import { ensureOrganizationPlanningCenterFormTabsOnConnect } from "../integrations/planningCenterFormTabs";
 import {
   createCodeChallenge,
   createRandomUrlSafeString,
@@ -182,12 +179,15 @@ async function callback(request: Request, env: Env): Promise<Response> {
       env,
       oauthState.organizationId
     );
-    const priorVolunteering = parseVolunteeringSetupState(priorSettings?.volunteering);
+    const { formTabs, hasError: formTabsSetupError } =
+      await ensureOrganizationPlanningCenterFormTabsOnConnect(
+        env,
+        oauthState.organizationId,
+        token.access_token,
+        priorSettings
+      );
 
-    const volunteering = await ensurePlanningCenterVolunteeringFields(
-      token.access_token,
-      priorVolunteering
-    );
+    const firstTabError = Object.values(formTabs).find((tab) => tab.status === "error");
 
     await upsertConnectedPlanningCenterIntegration(env, {
       organizationId: oauthState.organizationId,
@@ -205,16 +205,16 @@ async function callback(request: Request, env: Env): Promise<Response> {
           name: userInfo.name ?? null,
           email: userInfo.email ?? null
         },
-        volunteering
+        formTabs
       }),
-      lastError: volunteering.status === "error" ? volunteering.error ?? null : null
+      lastError: formTabsSetupError ? firstTabError?.error ?? null : null
     });
 
     const redirectParams: Record<string, string> = {
       planningCenter: "connected"
     };
 
-    if (volunteering.status === "error") {
+    if (formTabsSetupError) {
       redirectParams.fieldsSetup = "error";
     }
 
@@ -288,22 +288,6 @@ function redirectToFrontend(
   }
 
   return Response.redirect(redirectUrl.toString(), 302);
-}
-
-function parseVolunteeringSetupState(
-  value: unknown
-): PlanningCenterVolunteeringSetupState | null {
-  if (!value || typeof value !== "object") {
-    return null;
-  }
-
-  const record = value as PlanningCenterVolunteeringSetupState;
-
-  if (record.status !== "ready" && record.status !== "error") {
-    return null;
-  }
-
-  return record;
 }
 
 function normalizeOptionalString(value: unknown): string | null {

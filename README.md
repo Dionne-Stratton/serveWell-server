@@ -159,7 +159,7 @@ OAuth callback is a browser redirect (no JWT). Admin routes require `Authorizati
 
 Requires migration `0006` and Planning Center app credentials in Worker secrets / `.dev.vars`.
 
-On successful OAuth connect, the server ensures a People tab **SW Volunteering** and custom fields (Overall Frequency, Frequency Limits, Availability, Special Events, Requirements, Serving areas, Last synced). IDs are stored in `organization_integrations.settings_json` under `volunteering`. If setup fails, connect still completes and the admin redirect includes `fieldsSetup=error`.
+On successful OAuth connect, the server ensures one People tab per volunteer form, named **SW: {form name}** (for example **SW: Volunteering**), each with the same custom fields (Overall Frequency, Frequency Limits, Availability, Special Events, Requirements, Serving areas, Last synced). Tab and field IDs are stored in `organization_integrations.settings_json` under `formTabs` (keyed by form id). New forms created while connected get a matching tab automatically. If setup fails, connect still completes and the admin redirect includes `fieldsSetup=error`.
 
 ### Church signup (public)
 

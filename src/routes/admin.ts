@@ -38,6 +38,7 @@ import {
   validateAdminNoteText
 } from "../db/adminNotes";
 import { badRequest, json, methodNotAllowed, notFound, serverError, unauthorized } from "../http/responses";
+import { ensurePlanningCenterTabForForm } from "../integrations/planningCenterFormTabs";
 import {
   pushVolunteerSubmissionToPlanningCenter,
   PushVolunteerError
@@ -399,10 +400,29 @@ async function postForm(request: Request, env: Env): Promise<Response> {
       return badRequest("That URL slug is already used on another form.", "SLUG_IN_USE");
     }
 
+    const planningCenterTab = await ensurePlanningCenterTabForForm(
+      env,
+      auth.admin!.organizationId,
+      created.id,
+      created.name
+    );
+
+    const responseData: {
+      form: ReturnType<typeof mapAdminForm>;
+      planningCenter?: { tabCreated: boolean; tabName: string };
+    } = { form: mapAdminForm(created) };
+
+    if (planningCenterTab?.setup.status === "ready") {
+      responseData.planningCenter = {
+        tabCreated: true,
+        tabName: planningCenterTab.tabName
+      };
+    }
+
     return json(
       {
         success: true,
-        data: { form: mapAdminForm(created) }
+        data: responseData
       },
       { status: 201 }
     );
