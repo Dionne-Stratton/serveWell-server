@@ -1,3 +1,4 @@
+import { acceptAdminInvite, previewAdminInvite } from "../auth/adminInviteAccept";
 import { signAdminJwt } from "../auth/jwt";
 import { completePasswordReset, requestPasswordResetForEmail } from "../auth/passwordReset";
 import {
@@ -5,6 +6,7 @@ import {
   mapOrganizationProfile
 } from "../db/organizationRegistration";
 import { findActiveAdminById } from "../db/adminUsers";
+import { findActiveOrganizationById, mapPublicOrganization } from "../db/organizations";
 import { badRequest, json, methodNotAllowed, serverError } from "../http/responses";
 import type { Env } from "../types";
 import { validateOrganizationRegistration } from "../validation/organizationRegistration";
@@ -92,10 +94,7 @@ async function registerOrganization(request: Request, env: Env): Promise<Respons
         );
       }
 
-      return badRequest(
-        "An account with that admin email already exists.",
-        "ADMIN_EMAIL_TAKEN"
-      );
+      return serverError("Unable to create organization.");
     }
 
     const admin = await findActiveAdminById(env, created.adminId);
@@ -136,14 +135,15 @@ async function forgotPassword(request: Request, env: Env): Promise<Response> {
     return badRequest("Request body must be a JSON object.");
   }
 
+  const organizationSlug = normalizeRequiredString(body.organizationSlug);
   const email = normalizeRequiredString(body.email)?.toLowerCase();
 
-  if (!email) {
-    return badRequest("Email is required.");
+  if (!organizationSlug || !email) {
+    return badRequest("Organization URL slug and email are required.");
   }
 
   try {
-    await requestPasswordResetForEmail(env, email);
+    await requestPasswordResetForEmail(env, organizationSlug, email);
 
     return json({
       success: true,
@@ -196,6 +196,95 @@ async function resetPassword(request: Request, env: Env): Promise<Response> {
   } catch (error) {
     console.error("Failed reset password", error);
     return serverError("Unable to reset password.");
+  }
+}
+
+async function previewInvite(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+  const token = url.searchParams.get("token")?.trim();
+
+  if (!token) {
+    return badRequest("Invite token is required.");
+  }
+
+  try {
+    const preview = await previewAdminInvite(env, token);
+
+    if (!preview) {
+      return badRequest(
+        "This invitation link is invalid or has expired.",
+        "INVALID_INVITE_TOKEN"
+      );
+    }
+
+    return json({
+      success: true,
+      data: { invite: preview }
+    });
+  } catch (error) {
+    console.error("Failed invite preview", error);
+    return serverError("Unable to load invitation.");
+  }
+}
+
+async function acceptInvite(request: Request, env: Env): Promise<Response> {
+  let body: unknown;
+
+  try {
+    body = await request.json();
+  } catch {
+    return badRequest("Request body must be valid JSON.", "INVALID_JSON");
+  }
+
+  if (!isRecord(body)) {
+    return badRequest("Request body must be a JSON object.");
+  }
+
+  const token = normalizeRequiredString(body.token);
+  const newPassword = normalizeRequiredString(body.newPassword);
+  const confirmPassword = normalizeRequiredString(body.confirmPassword);
+
+  if (!token) {
+    return badRequest("Invite token is required.");
+  }
+
+  if (!newPassword || newPassword.length < 8) {
+    return badRequest("Password must be at least 8 characters.");
+  }
+
+  if (newPassword !== confirmPassword) {
+    return badRequest("Passwords do not match.");
+  }
+
+  try {
+    const admin = await acceptAdminInvite(env, token, newPassword);
+
+    if (!admin) {
+      return badRequest(
+        "This invitation link is invalid or has expired.",
+        "INVALID_INVITE_TOKEN"
+      );
+    }
+
+    const organization = await findActiveOrganizationById(env, admin.organizationId);
+
+    if (!organization) {
+      return serverError("Organization is not available.");
+    }
+
+    const jwt = await signAdminJwt(admin, env);
+
+    return json({
+      success: true,
+      data: {
+        token: jwt,
+        admin,
+        organization: mapPublicOrganization(organization)
+      }
+    });
+  } catch (error) {
+    console.error("Failed accept invite", error);
+    return serverError("Unable to accept invitation.");
   }
 }
 

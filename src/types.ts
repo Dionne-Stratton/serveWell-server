@@ -20,10 +20,12 @@ export interface ApiResponseBody<T = unknown> {
   };
 }
 
+import type { AdminRole } from "./validation/adminRoles";
+
 export interface AdminUser {
   id: number;
   organizationId: number;
   email: string;
   displayName: string;
-  role: "admin";
+  role: AdminRole;
 }

@@ -4,7 +4,10 @@ import {
   findValidPasswordResetAdminId,
   markPasswordResetTokenUsed
 } from "../db/passwordResetTokens";
-import { findActiveAdminByEmail, updateAdminPasswordHash } from "../db/adminUsers";
+import {
+  findActiveAdminByOrganizationSlugAndEmail,
+  updateAdminPasswordHash
+} from "../db/adminUsers";
 import { sendPasswordResetEmail } from "../email/sendPasswordReset";
 import { getFrontendOrigin } from "../env";
 import type { Env } from "../types";
@@ -31,14 +34,16 @@ function base64UrlEncode(bytes: Uint8Array): string {
 
 export async function requestPasswordResetForEmail(
   env: Env,
+  organizationSlug: string,
   email: string
 ): Promise<void> {
   const normalized = email.trim().toLowerCase();
-  if (!normalized) {
+  const slug = organizationSlug.trim();
+  if (!normalized || !slug) {
     return;
   }
 
-  const admin = await findActiveAdminByEmail(env, normalized);
+  const admin = await findActiveAdminByOrganizationSlugAndEmail(env, slug, normalized);
   if (!admin) {
     return;
   }

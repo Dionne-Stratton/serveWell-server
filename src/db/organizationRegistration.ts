@@ -14,7 +14,7 @@ export interface OrganizationProfile {
 
 export type CreateOrganizationResult =
   | { ok: true; organization: OrganizationProfile; adminId: number }
-  | { ok: false; reason: "slug_taken" | "email_taken" };
+  | { ok: false; reason: "slug_taken" };
 
 export async function isOrganizationSlugTaken(env: Env, slug: string): Promise<boolean> {
   const row = await env.DB.prepare(
@@ -31,31 +31,12 @@ export async function isOrganizationSlugTaken(env: Env, slug: string): Promise<b
   return Boolean(row);
 }
 
-export async function isAdminEmailTaken(env: Env, email: string): Promise<boolean> {
-  const row = await env.DB.prepare(
-    `
-    SELECT id
-    FROM admin_users
-    WHERE lower(email) = lower(?)
-    LIMIT 1
-    `
-  )
-    .bind(email)
-    .first<{ id: number }>();
-
-  return Boolean(row);
-}
-
 export async function createOrganizationWithAdmin(
   env: Env,
   input: OrganizationRegistrationInput
 ): Promise<CreateOrganizationResult> {
   if (await isOrganizationSlugTaken(env, input.organizationSlug)) {
     return { ok: false, reason: "slug_taken" };
-  }
-
-  if (await isAdminEmailTaken(env, input.adminEmail)) {
-    return { ok: false, reason: "email_taken" };
   }
 
   const passwordHash = await hashPassword(input.adminPassword);
@@ -89,7 +70,7 @@ export async function createOrganizationWithAdmin(
         display_name,
         role,
         is_active
-      ) VALUES (last_insert_rowid(), ?, ?, ?, 'admin', 1)
+      ) VALUES (last_insert_rowid(), ?, ?, ?, 'owner', 1)
       `
     ).bind(input.adminEmail, passwordHash, input.adminDisplayName)
   ]);

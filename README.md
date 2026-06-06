@@ -77,6 +77,8 @@ Migrations live in `migrations/`:
 - `0006_planning_center_integrations.sql` — org-scoped Planning Center OAuth storage (`organization_integrations`, `oauth_states`)
 - `0007_volunteer_planning_center_person_id.sql` — `volunteer_submissions.planning_center_person_id` (push/pull link to PC People)
 - `0008_password_reset_tokens.sql` — staff password reset tokens
+- `0009_admin_session_version.sql` — JWT session invalidation on password change
+- `0010_multi_admin_invites.sql` — `owner` role, `admin_invites` for team invites
 
 **Password reset email:** set `RESEND_API_KEY` (and optionally `RESEND_FROM`) on the Worker. Without a key, local dev logs the reset URL to the console.
 
@@ -219,14 +221,14 @@ curl -s -X POST "http://127.0.0.1:8787/api/auth/register" \
   }'
 ```
 
-Use the returned `data.token` with `GET /api/admin/me`, or sign in via `POST /api/admin/login` with the same email and password.
+Use the returned `data.token` with `GET /api/admin/me`, or sign in via `POST /api/admin/login` with organization slug, email, and password.
 
 Admin login:
 
 ```sh
 curl -s -X POST "http://127.0.0.1:8787/api/admin/login" \
   -H "Content-Type: application/json" \
-  -d '{"email":"church@example.com","password":"temporary-password"}'
+  -d '{"organizationSlug":"demo","email":"church@example.com","password":"temporary-password"}'
 ```
 
 Save the `data.token` from the response, then list submissions:

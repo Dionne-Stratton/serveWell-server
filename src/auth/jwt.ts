@@ -1,5 +1,7 @@
 import { getAdminSessionVersion } from "../db/adminUsers";
 import { getRequiredEnv } from "../env";
+import type { AdminRole } from "../validation/adminRoles";
+import { isAdminRole } from "../validation/adminRoles";
 import type { AdminUser, Env } from "../types";
 
 export function getJwtSecret(env: Env): string {
@@ -16,7 +18,7 @@ interface AdminJwtPayload {
   organizationId: number;
   email: string;
   displayName: string;
-  role: "admin";
+  role: AdminRole;
   sv: number;
   iat: number;
   exp: number;
@@ -69,7 +71,7 @@ export async function verifyAdminJwt(token: string, env: Env): Promise<VerifiedA
     return null;
   }
 
-  if (payload.role !== "admin") {
+  if (!isAdminRole(payload.role)) {
     return null;
   }
 

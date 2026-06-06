@@ -1,7 +1,7 @@
 import { requireAdmin } from "../auth/adminGuard";
 import { signAdminJwt } from "../auth/jwt";
 import { verifyPassword } from "../auth/passwords";
-import { findActiveAdminByEmail } from "../db/adminUsers";
+import { findActiveAdminByOrganizationSlugAndEmail } from "../db/adminUsers";
 import {
   findActiveOrganizationById,
   mapAdminSessionOrganization,
@@ -38,6 +38,7 @@ import {
   validateAdminNoteText
 } from "../db/adminNotes";
 import { badRequest, json, methodNotAllowed, notFound, serverError, unauthorized } from "../http/responses";
+import { tryAdminTeamRoute } from "./adminTeam";
 import { ensurePlanningCenterTabForForm } from "../integrations/planningCenterFormTabs";
 import {
   pushVolunteerSubmissionToPlanningCenter,
@@ -67,6 +68,12 @@ export async function adminRoutes(
     }
 
     return me(request, env);
+  }
+
+  const teamResponse = await tryAdminTeamRoute(request, env, url.pathname);
+
+  if (teamResponse) {
+    return teamResponse;
   }
 
   if (url.pathname === "/api/admin/request-password-reset") {
@@ -199,15 +206,20 @@ async function login(request: Request, env: Env): Promise<Response> {
     return badRequest("Request body must be a JSON object.");
   }
 
+  const organizationSlug = normalizeRequiredString(body.organizationSlug);
   const email = normalizeRequiredString(body.email);
   const password = normalizeRequiredString(body.password);
 
-  if (!email || !password) {
-    return badRequest("Email and password are required.");
+  if (!organizationSlug || !email || !password) {
+    return badRequest("Organization, email, and password are required.");
   }
 
   try {
-    const admin = await findActiveAdminByEmail(env, email);
+    const admin = await findActiveAdminByOrganizationSlugAndEmail(
+      env,
+      organizationSlug,
+      email
+    );
 
     if (!admin || !(await verifyPassword(password, admin.passwordHash))) {
       return json(

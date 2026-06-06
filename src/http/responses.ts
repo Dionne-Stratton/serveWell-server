@@ -38,6 +38,13 @@ export function unauthorized(message = "Unauthorized."): Response {
   );
 }
 
+export function forbidden(message = "Forbidden."): Response {
+  return json(
+    { success: false, error: { message, code: "FORBIDDEN" } },
+    { status: 403 }
+  );
+}
+
 export function serverError(message = "Something went wrong."): Response {
   return json(
     { success: false, error: { message, code: "INTERNAL_SERVER_ERROR" } },
