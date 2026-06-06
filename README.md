@@ -113,7 +113,7 @@ All public volunteer data and submissions are scoped by **organization slug** (a
 | `POST` | `/api/organizations/:organizationSlug/forms/:formSlug/submissions` | Create submission for that form |
 | `POST` | `/api/organizations/:organizationSlug/volunteer-submissions` | Create submission on org default form |
 
-Public form payloads include **sections** (when present), serving areas, and requirements. Submissions require **email and phone** (validated server-side).
+Public form payloads include **sections** (when present), serving areas, and requirements. Submissions require **email**; **phone** is optional unless preferred contact is text or phone (validated server-side).
 
 Legacy global routes (`GET /api/serving-areas`, `POST /api/volunteer-submissions`) are **removed**. Use the organization routes above (e.g. slug `demo`).
 

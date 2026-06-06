@@ -3,6 +3,7 @@ import {
   experienceLevels,
   frequencyOptions,
   isOneOf,
+  phoneRequiredPreferredContactMethods,
   preferredContactMethods
 } from "./enums";
 import type {
@@ -43,7 +44,7 @@ export async function validateVolunteerSubmission(
   const firstName = normalizeRequiredString(body.firstName);
   const lastName = normalizeRequiredString(body.lastName);
   const email = normalizeRequiredString(body.email);
-  const phone = normalizeRequiredString(body.phone);
+  const phone = normalizeOptionalString(body.phone);
   const preferredContactMethod = body.preferredContactMethod;
   const overallFrequency = body.overallFrequency;
 
@@ -53,10 +54,18 @@ export async function validateVolunteerSubmission(
   if (!EMAIL_PATTERN.test(email)) {
     return { error: "Please enter a valid email address." };
   }
-  if (!phone) return { error: "Phone number is required." };
-
   if (!isOneOf(preferredContactMethod, preferredContactMethods)) {
     return { error: "Preferred contact method is required." };
+  }
+
+  if (
+    isOneOf(preferredContactMethod, phoneRequiredPreferredContactMethods) &&
+    !phone
+  ) {
+    return {
+      error:
+        "Phone number is required when your preferred contact method is phone or text."
+    };
   }
 
   if (!isOneOf(overallFrequency, frequencyOptions)) {

@@ -1,5 +1,8 @@
 export const preferredContactMethods = ["email", "text", "phone", "no_preference"] as const;
 
+/** Preferred contact choices that require a phone number on the submission. */
+export const phoneRequiredPreferredContactMethods = ["text", "phone"] as const;
+
 export const frequencyOptions = [
   "every_week",
   "two_to_three_times_month",
