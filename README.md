@@ -80,6 +80,7 @@ Migrations live in `migrations/`:
 - `0009_admin_session_version.sql` — JWT session invalidation on password change
 - `0010_multi_admin_invites.sql` — `owner` role, `admin_invites` for team invites
 - `0011_submission_updated_by_planning_center_sync.sql` — `updated_by_admin_user_id`, PC sync metadata; drops `added_to_planning_center` status
+- `0012_submission_intake_updated_at.sql` — `intake_updated_at` for intake-only edits (Planning Center “edited since last sync” vs status/archive `updated_at`)
 
 **Password reset email:** set `RESEND_API_KEY` (and optionally `RESEND_FROM`) on the Worker. Without a key, local dev logs the reset URL to the console.
 
@@ -132,11 +133,11 @@ Legacy global routes (`GET /api/serving-areas`, `POST /api/volunteer-submissions
 | `DELETE` | `/api/admin/team/invites/:inviteId` | Owner only; revoke pending invite |
 | `DELETE` | `/api/admin/team/members/:adminUserId` | Owner only; deactivate admin (not owner, not self) |
 | `GET` | `/api/admin/submissions` | List for authenticated admin’s org; query: `formId`, `status`, `archived`, `servingAreaId`, `search` |
-| `GET` | `/api/admin/submissions/:id` | Detail; must belong to admin’s org |
-| `PATCH` | `/api/admin/submissions/:id` | Update workflow fields (`status`, `isArchived`) |
-| `PUT` | `/api/admin/submissions/:id` | Replace volunteer intake fields (same body as public submit; not allowed for org `demo`) |
+| `GET` | `/api/admin/submissions/:id` | Detail (`editedSinceLastPlanningCenterSync`, PC sync fields, `updatedBy`); must belong to admin’s org |
+| `PATCH` | `/api/admin/submissions/:id` | Update workflow fields (`status`, `isArchived`); updates `updated_at` / `updated_by`, not `intake_updated_at` |
+| `PUT` | `/api/admin/submissions/:id` | Replace volunteer intake fields (same body as public submit; sets `intake_updated_at`; not allowed for org `demo`) |
 | `DELETE` | `/api/admin/submissions/:id` | Permanent delete in ServeWell only (not Planning Center) |
-| `POST` | `/api/admin/submissions/:id/planning-center` | Push/sync submission to PC People (per-form tab in `formTabs`) |
+| `POST` | `/api/admin/submissions/:id/planning-center` | Push/sync to PC People; records `planning_center_synced_at` / `by` (does not change workflow status on re-sync) |
 | `POST` | `/api/admin/submissions/:id/notes` | Add staff-only note to a submission |
 | `DELETE` | `/api/admin/notes/:noteId` | Delete a note in the authenticated admin’s org |
 | `GET` | `/api/admin/forms` | List volunteer forms for the admin’s org |
