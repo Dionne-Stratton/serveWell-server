@@ -33,6 +33,8 @@ import {
   touchSubmissionAdminActivity,
   updateAdminSubmission
 } from "../db/adminSubmissions";
+import { replaceVolunteerSubmissionContent } from "../db/volunteerSubmissions";
+import { validateVolunteerSubmission } from "../validation/volunteerSubmissions";
 import {
   createAdminNote,
   deleteAdminNote,
@@ -182,6 +184,10 @@ export async function adminRoutes(
 
     if (request.method === "PATCH") {
       return patchSubmission(request, env, submissionId);
+    }
+
+    if (request.method === "PUT") {
+      return putSubmission(request, env, submissionId);
     }
 
     if (request.method === "DELETE") {
@@ -554,6 +560,88 @@ async function submissionDetail(
   }
 }
 
+async function putSubmission(
+  request: Request,
+  env: Env,
+  submissionId: number
+): Promise<Response> {
+  try {
+    const auth = await requireAdmin(request, env);
+
+    if (auth.response) {
+      return auth.response;
+    }
+
+    const organization = await findActiveOrganizationById(env, auth.admin!.organizationId);
+
+    if (!organization) {
+      return serverError("Admin organization is not available.");
+    }
+
+    if (organization.slug === DEMO_ORGANIZATION_SLUG) {
+      return badRequest("Volunteer submissions cannot be edited in the demo organization.");
+    }
+
+    const existing = await getAdminSubmissionDetail(
+      env,
+      submissionId,
+      auth.admin!.organizationId
+    );
+
+    if (!existing) {
+      return notFound();
+    }
+
+    let body: unknown;
+
+    try {
+      body = await request.json();
+    } catch {
+      return badRequest("Request body must be valid JSON.", "INVALID_JSON");
+    }
+
+    const validation = await validateVolunteerSubmission(env, body, {
+      organizationId: auth.admin!.organizationId,
+      formId: existing.submission.formId
+    });
+
+    if (validation.error || !validation.input) {
+      return badRequest(validation.error ?? "Invalid submission payload.");
+    }
+
+    const replaced = await replaceVolunteerSubmissionContent(
+      env,
+      submissionId,
+      auth.admin!.organizationId,
+      existing.submission.formId,
+      validation.input,
+      auth.admin!.id
+    );
+
+    if (!replaced) {
+      return notFound();
+    }
+
+    const detail = await getAdminSubmissionDetail(
+      env,
+      submissionId,
+      auth.admin!.organizationId
+    );
+
+    if (!detail) {
+      return serverError("Submission was updated but could not be reloaded.");
+    }
+
+    return json({
+      success: true,
+      data: detail
+    });
+  } catch (error) {
+    console.error("Failed admin submission replace", error);
+    return serverError("Unable to update submission.");
+  }
+}
+
 async function patchSubmission(
   request: Request,
   env: Env,
@@ -742,7 +830,8 @@ async function pushSubmissionToPlanningCenter(
           status: result.status,
           planningCenterPersonId: result.planningCenterPersonId,
           planningCenterSyncedAt: result.planningCenterSyncedAt,
-          planningCenterSyncedBy: result.planningCenterSyncedBy
+          planningCenterSyncedBy: result.planningCenterSyncedBy,
+          editedSinceLastPlanningCenterSync: result.editedSinceLastPlanningCenterSync
         }
       }
     });

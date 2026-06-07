@@ -133,7 +133,8 @@ Legacy global routes (`GET /api/serving-areas`, `POST /api/volunteer-submissions
 | `DELETE` | `/api/admin/team/members/:adminUserId` | Owner only; deactivate admin (not owner, not self) |
 | `GET` | `/api/admin/submissions` | List for authenticated admin’s org; query: `formId`, `status`, `archived`, `servingAreaId`, `search` |
 | `GET` | `/api/admin/submissions/:id` | Detail; must belong to admin’s org |
-| `PATCH` | `/api/admin/submissions/:id` | Update admin fields (e.g. status, archive) |
+| `PATCH` | `/api/admin/submissions/:id` | Update workflow fields (`status`, `isArchived`) |
+| `PUT` | `/api/admin/submissions/:id` | Replace volunteer intake fields (same body as public submit; not allowed for org `demo`) |
 | `DELETE` | `/api/admin/submissions/:id` | Permanent delete in ServeWell only (not Planning Center) |
 | `POST` | `/api/admin/submissions/:id/planning-center` | Push/sync submission to PC People (per-form tab in `formTabs`) |
 | `POST` | `/api/admin/submissions/:id/notes` | Add staff-only note to a submission |

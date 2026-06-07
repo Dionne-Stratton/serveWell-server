@@ -83,6 +83,77 @@ export async function createVolunteerSubmission(
     throw new Error("D1 did not return a submission id.");
   }
 
+  await insertVolunteerSubmissionChildren(env, submissionId, scope, input);
+  return submissionId;
+}
+
+export async function replaceVolunteerSubmissionContent(
+  env: Env,
+  submissionId: number,
+  organizationId: number,
+  formId: number,
+  input: CreateVolunteerSubmissionInput,
+  adminUserId: number
+): Promise<boolean> {
+  const update = await env.DB.prepare(
+    `
+    UPDATE volunteer_submissions
+    SET
+      first_name = ?,
+      last_name = ?,
+      email = ?,
+      phone = ?,
+      preferred_contact_method = ?,
+      overall_frequency = ?,
+      open_to_special_events = ?,
+      experience_notes = ?,
+      additional_notes = ?,
+      updated_at = CURRENT_TIMESTAMP,
+      intake_updated_at = CURRENT_TIMESTAMP,
+      updated_by_admin_user_id = ?
+    WHERE id = ? AND organization_id = ? AND form_id = ?
+    `
+  )
+    .bind(
+      input.firstName,
+      input.lastName,
+      input.email,
+      input.phone,
+      input.preferredContactMethod,
+      input.overallFrequency,
+      input.openToSpecialEvents ? 1 : 0,
+      input.experienceNotes,
+      input.additionalNotes,
+      adminUserId,
+      submissionId,
+      organizationId,
+      formId
+    )
+    .run();
+
+  if ((update.meta.changes ?? 0) === 0) {
+    return false;
+  }
+
+  await env.DB.batch([
+    env.DB.prepare(`DELETE FROM volunteer_interests WHERE submission_id = ?`).bind(submissionId),
+    env.DB.prepare(`DELETE FROM volunteer_availability WHERE submission_id = ?`).bind(submissionId),
+    env.DB.prepare(`DELETE FROM volunteer_requirement_confirmations WHERE submission_id = ?`).bind(
+      submissionId
+    )
+  ]);
+
+  const scope: VolunteerSubmissionScope = { organizationId, formId };
+  await insertVolunteerSubmissionChildren(env, submissionId, scope, input);
+  return true;
+}
+
+async function insertVolunteerSubmissionChildren(
+  env: Env,
+  submissionId: number,
+  scope: VolunteerSubmissionScope,
+  input: CreateVolunteerSubmissionInput
+): Promise<void> {
   const areaNameById = await loadServingAreaNames(
     env,
     input.interests.map((interest) => interest.servingAreaId)
@@ -161,8 +232,6 @@ export async function createVolunteerSubmission(
   if (relatedStatements.length > 0) {
     await env.DB.batch(relatedStatements);
   }
-
-  return submissionId;
 }
 
 async function loadServingAreaNames(

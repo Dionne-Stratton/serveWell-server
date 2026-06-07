@@ -1,5 +1,6 @@
 import {
   getAdminSubmissionDetail,
+  isSubmissionEditedSincePlanningCenterSync,
   recordPlanningCenterSync,
   type AdminActorSummary
 } from "../db/adminSubmissions";
@@ -41,6 +42,7 @@ export interface PushVolunteerToPlanningCenterResult {
   planningCenterPersonId: string;
   planningCenterSyncedAt: string;
   planningCenterSyncedBy: AdminActorSummary;
+  editedSinceLastPlanningCenterSync: boolean;
 }
 
 export async function pushVolunteerSubmissionToPlanningCenter(
@@ -116,8 +118,10 @@ export async function pushVolunteerSubmissionToPlanningCenter(
     );
   }
 
-  const syncedAt = new Date().toISOString();
-  const fieldValues = buildPlanningCenterVolunteerFieldValues(detail, syncedAt);
+  const fieldValues = buildPlanningCenterVolunteerFieldValues(
+    detail,
+    new Date().toISOString()
+  );
 
   let personId: string;
 
@@ -166,6 +170,7 @@ export async function pushVolunteerSubmissionToPlanningCenter(
     throw error;
   }
 
+  const syncedAt = new Date().toISOString();
   const updated = await recordPlanningCenterSync(env, submissionId, organizationId, {
     planningCenterPersonId: personId,
     syncedByAdminUserId,
@@ -176,13 +181,20 @@ export async function pushVolunteerSubmissionToPlanningCenter(
     throw new PushVolunteerError("Submission not found.", "NOT_FOUND", 404);
   }
 
+  const intakeUpdatedAt = updated.intakeUpdatedAt ?? updated.updatedAt;
+
   return {
     personId,
     submissionId,
     status: updated.status,
     planningCenterPersonId: personId,
     planningCenterSyncedAt: updated.planningCenterSyncedAt,
-    planningCenterSyncedBy: updated.planningCenterSyncedBy
+    planningCenterSyncedBy: updated.planningCenterSyncedBy,
+    editedSinceLastPlanningCenterSync: isSubmissionEditedSincePlanningCenterSync({
+      planningCenterPersonId: personId,
+      planningCenterSyncedAt: updated.planningCenterSyncedAt,
+      intakeUpdatedAt
+    })
   };
 }
 

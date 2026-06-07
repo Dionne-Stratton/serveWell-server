@@ -58,6 +58,7 @@ export interface AdminSubmissionDetail {
     planningCenterPersonId: string | null;
     planningCenterSyncedAt: string | null;
     planningCenterSyncedBy: AdminActorSummary | null;
+    editedSinceLastPlanningCenterSync: boolean;
     createdAt: string;
     updatedAt: string;
     updatedBy: AdminActorSummary | null;
@@ -75,6 +76,7 @@ export interface AdminSubmissionDetail {
     interestNotes: string | null;
   }>;
   requirementConfirmations: Array<{
+    servingAreaId: number;
     requirementId: number;
     servingAreaName: string;
     label: string;
@@ -118,6 +120,7 @@ export interface AdminSubmissionMutationResult {
   planningCenterSyncedAt: string | null;
   planningCenterSyncedBy: AdminActorSummary | null;
   updatedAt: string;
+  intakeUpdatedAt: string;
   updatedBy: AdminActorSummary | null;
 }
 
@@ -167,6 +170,7 @@ interface AdminSubmissionDetailRow {
   pc_synced_by_email: string | null;
   created_at: string;
   updated_at: string;
+  intake_updated_at: string | null;
   availability: string | null;
 }
 
@@ -184,6 +188,7 @@ interface AdminSubmissionInterestRow {
 }
 
 interface AdminSubmissionConfirmationRow {
+  serving_area_id: number;
   requirement_id: number;
   serving_area_name: string;
   label: string;
@@ -345,6 +350,7 @@ export async function getAdminSubmissionDetail(
       pc_sync_admin.email AS pc_synced_by_email,
       vs.created_at,
       vs.updated_at,
+      vs.intake_updated_at,
       GROUP_CONCAT(DISTINCT va.availability_key) AS availability
     FROM volunteer_submissions vs
     INNER JOIN volunteer_forms vf
@@ -409,6 +415,12 @@ export async function getAdminSubmissionDetail(
         submission.updated_by_display_name,
         submission.updated_by_email
       ),
+      editedSinceLastPlanningCenterSync: isSubmissionEditedSincePlanningCenterSync({
+        planningCenterPersonId: submission.planning_center_person_id ?? null,
+        planningCenterSyncedAt: submission.planning_center_synced_at ?? null,
+        intakeUpdatedAt:
+          submission.intake_updated_at ?? submission.updated_at
+      }),
     },
     interests,
     requirementConfirmations: confirmations,
@@ -468,6 +480,7 @@ async function listRequirementConfirmations(
   const result = await env.DB.prepare(
     `
     SELECT
+      vrc.serving_area_id,
       vrc.requirement_id,
       sa.name AS serving_area_name,
       sar.label,
@@ -485,6 +498,7 @@ async function listRequirementConfirmations(
     .all<AdminSubmissionConfirmationRow>();
 
   return (result.results ?? []).map((row) => ({
+    servingAreaId: row.serving_area_id,
     requirementId: row.requirement_id,
     servingAreaName: row.serving_area_name,
     label: row.label,
@@ -680,6 +694,7 @@ async function getAdminSubmissionMutationResult(
       vs.planning_center_synced_at,
       vs.planning_center_synced_by_admin_user_id,
       vs.updated_at,
+      vs.intake_updated_at,
       vs.updated_by_admin_user_id,
       updated_admin.display_name AS updated_by_display_name,
       updated_admin.email AS updated_by_email,
@@ -703,6 +718,7 @@ async function getAdminSubmissionMutationResult(
       planning_center_synced_at: string | null;
       planning_center_synced_by_admin_user_id: number | null;
       updated_at: string;
+      intake_updated_at: string | null;
       updated_by_admin_user_id: number | null;
       updated_by_display_name: string | null;
       updated_by_email: string | null;
@@ -726,12 +742,46 @@ async function getAdminSubmissionMutationResult(
       updated.pc_synced_by_email
     ),
     updatedAt: updated.updated_at,
+    intakeUpdatedAt: updated.intake_updated_at ?? updated.updated_at,
     updatedBy: mapAdminActorFromJoin(
       updated.updated_by_admin_user_id,
       updated.updated_by_display_name,
       updated.updated_by_email
     )
   };
+}
+
+function parseStoredTimestamp(value: string): number {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return Number.NaN;
+  }
+
+  if (trimmed.includes("T")) {
+    return Date.parse(trimmed);
+  }
+
+  return Date.parse(`${trimmed.replace(" ", "T")}Z`);
+}
+
+export function isSubmissionEditedSincePlanningCenterSync(submission: {
+  planningCenterPersonId: string | null;
+  planningCenterSyncedAt: string | null;
+  intakeUpdatedAt: string;
+}): boolean {
+  if (!submission.planningCenterPersonId?.trim() || !submission.planningCenterSyncedAt) {
+    return false;
+  }
+
+  const syncMs = parseStoredTimestamp(submission.planningCenterSyncedAt);
+  const intakeMs = parseStoredTimestamp(submission.intakeUpdatedAt);
+
+  if (Number.isNaN(syncMs) || Number.isNaN(intakeMs)) {
+    return false;
+  }
+
+  return intakeMs > syncMs;
 }
 
 function mapAdminActorFromJoin(
