@@ -200,6 +200,54 @@ function mapVolunteerForm(row: VolunteerFormRow): VolunteerForm {
   };
 }
 
+export type UpdateOrganizationProfileResult =
+  | { ok: true; organization: Organization }
+  | { ok: false; error: string; code?: string };
+
+export async function updateOrganizationProfile(
+  env: Env,
+  organizationId: number,
+  input: {
+    name: string;
+    organizationType: string;
+    contactEmail: string | null;
+    websiteUrl: string | null;
+  }
+): Promise<UpdateOrganizationProfileResult> {
+  const result = await env.DB.prepare(
+    `
+    UPDATE organizations
+    SET
+      name = ?,
+      organization_type = ?,
+      contact_email = ?,
+      website_url = ?,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND is_active = 1
+    `
+  )
+    .bind(
+      input.name,
+      input.organizationType,
+      input.contactEmail,
+      input.websiteUrl,
+      organizationId
+    )
+    .run();
+
+  if ((result.meta.changes ?? 0) === 0) {
+    return { ok: false, error: "Unable to update organization." };
+  }
+
+  const organization = await findActiveOrganizationById(env, organizationId);
+
+  if (!organization) {
+    return { ok: false, error: "Unable to update organization." };
+  }
+
+  return { ok: true, organization };
+}
+
 export function mapPublicOrganization(organization: Organization) {
   return {
     id: organization.id,

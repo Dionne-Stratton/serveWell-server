@@ -147,6 +147,76 @@ export function validateOrganizationRegistration(body: unknown): RegistrationVal
   };
 }
 
+export interface OrganizationProfileUpdateInput {
+  name: string;
+  organizationType: OrganizationType;
+  contactEmail: string | null;
+  websiteUrl: string | null;
+}
+
+export type OrganizationProfileValidationResult =
+  | { ok: false; message: string; code: string }
+  | { ok: true; value: OrganizationProfileUpdateInput };
+
+export function validateOrganizationProfileUpdate(
+  body: unknown
+): OrganizationProfileValidationResult {
+  if (!isRecord(body)) {
+    return {
+      ok: false,
+      message: "Request body must be a JSON object.",
+      code: "INVALID_JSON"
+    };
+  }
+
+  const name = normalizeRequiredString(body.name);
+  const organizationType = normalizeOrganizationType(body.organizationType);
+  const contactEmail = normalizeOptionalEmail(body.contactEmail);
+  const websiteUrl = normalizeOptionalUrl(body.websiteUrl);
+
+  if (!name || name.length > 120) {
+    return {
+      ok: false,
+      message: "Organization name is required (120 characters or fewer).",
+      code: "INVALID_ORGANIZATION_NAME"
+    };
+  }
+
+  if (!organizationType) {
+    return {
+      ok: false,
+      message: "Organization type must be church, ministry, or other.",
+      code: "INVALID_ORGANIZATION_TYPE"
+    };
+  }
+
+  if (body.contactEmail !== undefined && body.contactEmail !== null && contactEmail === null) {
+    return {
+      ok: false,
+      message: "Contact email must be a valid email address.",
+      code: "INVALID_CONTACT_EMAIL"
+    };
+  }
+
+  if (body.websiteUrl !== undefined && body.websiteUrl !== null && websiteUrl === null) {
+    return {
+      ok: false,
+      message: "Website URL must be a valid http or https URL.",
+      code: "INVALID_WEBSITE_URL"
+    };
+  }
+
+  return {
+    ok: true,
+    value: {
+      name,
+      organizationType,
+      contactEmail,
+      websiteUrl
+    }
+  };
+}
+
 function normalizeSlug(value: unknown): string | null {
   if (typeof value !== "string") {
     return null;

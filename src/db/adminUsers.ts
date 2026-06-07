@@ -201,6 +201,94 @@ export async function deactivateAdminUser(
   return (result.meta.changes ?? 0) > 0;
 }
 
+const ADMIN_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export type UpdateAdminProfileResult =
+  | { ok: true; admin: AdminUser }
+  | { ok: false; error: string; code?: string };
+
+export async function updateAdminProfile(
+  env: Env,
+  adminUserId: number,
+  organizationId: number,
+  input: { displayName?: string; email?: string }
+): Promise<UpdateAdminProfileResult> {
+  if (input.displayName === undefined && input.email === undefined) {
+    return { ok: false, error: "No profile fields to update." };
+  }
+
+  const updates: string[] = [];
+  const binds: (string | number)[] = [];
+
+  if (input.displayName !== undefined) {
+    const displayName = input.displayName.trim();
+
+    if (!displayName) {
+      return { ok: false, error: "Name is required.", code: "INVALID_DISPLAY_NAME" };
+    }
+
+    updates.push("display_name = ?");
+    binds.push(displayName);
+  }
+
+  if (input.email !== undefined) {
+    const email = input.email.trim().toLowerCase();
+
+    if (!email || !ADMIN_EMAIL_PATTERN.test(email)) {
+      return { ok: false, error: "Please enter a valid email address.", code: "INVALID_EMAIL" };
+    }
+
+    const taken = await env.DB.prepare(
+      `
+      SELECT id
+      FROM admin_users
+      WHERE organization_id = ?
+        AND lower(email) = lower(?)
+        AND id != ?
+        AND is_active = 1
+      LIMIT 1
+      `
+    )
+      .bind(organizationId, email, adminUserId)
+      .first<{ id: number }>();
+
+    if (taken) {
+      return {
+        ok: false,
+        error: "Another admin in this organization already uses that email.",
+        code: "EMAIL_IN_USE"
+      };
+    }
+
+    updates.push("email = ?");
+    binds.push(email);
+  }
+
+  binds.push(adminUserId, organizationId);
+
+  const result = await env.DB.prepare(
+    `
+    UPDATE admin_users
+    SET ${updates.join(", ")}, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND organization_id = ? AND is_active = 1
+    `
+  )
+    .bind(...binds)
+    .run();
+
+  if ((result.meta.changes ?? 0) === 0) {
+    return { ok: false, error: "Unable to update profile." };
+  }
+
+  const admin = await findActiveAdminById(env, adminUserId);
+
+  if (!admin) {
+    return { ok: false, error: "Unable to update profile." };
+  }
+
+  return { ok: true, admin };
+}
+
 export async function findActiveAdminById(env: Env, id: number): Promise<AdminUser | null> {
   const row = await env.DB.prepare(
     `

@@ -2,19 +2,30 @@ import { requireAdmin } from "../auth/adminGuard";
 import { requireOwner } from "../auth/adminOwnerGuard";
 import { signAdminJwt } from "../auth/jwt";
 import { verifyPassword } from "../auth/passwords";
-import { findActiveAdminByOrganizationSlugAndEmail } from "../db/adminUsers";
+import {
+  findActiveAdminByOrganizationSlugAndEmail,
+  updateAdminProfile
+} from "../db/adminUsers";
 import { permanentlyDeleteOrganization } from "../db/organizationDelete";
 import {
   findActiveOrganizationById,
   mapAdminSessionOrganization,
-  mapPublicOrganization
+  mapPublicOrganization,
+  updateOrganizationProfile
 } from "../db/organizations";
+import { validateOrganizationProfileUpdate } from "../validation/organizationRegistration";
 import {
   completePasswordReset,
   requestPasswordResetForEmail,
   sendPasswordResetForAdmin
 } from "../auth/passwordReset";
+import {
+  getAdminNotificationPreferences,
+  updateAdminNotificationPreferences
+} from "../db/adminNotificationPreferences";
 import { DEMO_ORGANIZATION_SLUG } from "../constants/demo";
+import { normalizeSubmissionStatus } from "../lib/submissionStatus";
+import { notifyAdminsOfReadyToSchedule } from "../notifications/submissionNotifications";
 import {
   createAdminVolunteerForm,
   getAdminFormById,
@@ -55,7 +66,7 @@ import { isOneOf, submissionStatuses } from "../validation/enums";
 export async function adminRoutes(
   request: Request,
   env: Env,
-  _ctx: ExecutionContext
+  ctx: ExecutionContext
 ): Promise<Response> {
   const url = new URL(request.url);
 
@@ -68,14 +79,22 @@ export async function adminRoutes(
   }
 
   if (url.pathname === "/api/admin/me") {
-    if (request.method !== "GET") {
-      return methodNotAllowed();
+    if (request.method === "GET") {
+      return me(request, env);
     }
 
-    return me(request, env);
+    if (request.method === "PATCH") {
+      return patchMe(request, env);
+    }
+
+    return methodNotAllowed();
   }
 
   if (url.pathname === "/api/admin/organization") {
+    if (request.method === "PATCH") {
+      return patchOrganization(request, env);
+    }
+
     if (request.method === "DELETE") {
       return deleteOrganization(request, env);
     }
@@ -193,7 +212,7 @@ export async function adminRoutes(
     }
 
     if (request.method === "PATCH") {
-      return patchSubmission(request, env, submissionId);
+      return patchSubmission(ctx, request, env, submissionId);
     }
 
     if (request.method === "PUT") {
@@ -288,16 +307,231 @@ async function me(request: Request, env: Env): Promise<Response> {
       return serverError("Admin organization is not available.");
     }
 
+    const notificationPreferences = await getAdminNotificationPreferences(
+      env,
+      auth.admin!.id,
+      auth.admin!.organizationId
+    );
+
     return json({
       success: true,
       data: {
         admin: auth.admin,
-        organization: mapAdminSessionOrganization(organization)
+        organization: mapAdminSessionOrganization(organization),
+        notificationPreferences: notificationPreferences ?? {
+          newSubmissions: true,
+          readyToSchedule: false,
+          volunteerUpdated: false
+        }
       }
     });
   } catch (error) {
     console.error("Failed admin me lookup", error);
     return serverError("Unable to load admin profile.");
+  }
+}
+
+async function patchMe(request: Request, env: Env): Promise<Response> {
+  try {
+    const auth = await requireAdmin(request, env);
+
+    if (auth.response) {
+      return auth.response;
+    }
+
+    let body: unknown;
+
+    try {
+      body = await request.json();
+    } catch {
+      return badRequest("Request body must be valid JSON.", "INVALID_JSON");
+    }
+
+    if (!isRecord(body)) {
+      return badRequest("Request body must be a JSON object.");
+    }
+
+    const hasDisplayName = body.displayName !== undefined;
+    const hasEmail = body.email !== undefined;
+    const prefsBody = body.notificationPreferences;
+    const hasPrefs = prefsBody !== undefined;
+
+    if (!hasDisplayName && !hasEmail && !hasPrefs) {
+      return badRequest(
+        "Provide displayName, email, and/or notificationPreferences to update."
+      );
+    }
+
+    let admin = auth.admin!;
+
+    if (hasDisplayName || hasEmail) {
+      const profileInput: { displayName?: string; email?: string } = {};
+
+      if (hasDisplayName) {
+        if (typeof body.displayName !== "string") {
+          return badRequest("displayName must be a string.");
+        }
+
+        profileInput.displayName = body.displayName;
+      }
+
+      if (hasEmail) {
+        if (typeof body.email !== "string") {
+          return badRequest("email must be a string.");
+        }
+
+        profileInput.email = body.email;
+      }
+
+      const profileResult = await updateAdminProfile(
+        env,
+        admin.id,
+        admin.organizationId,
+        profileInput
+      );
+
+      if (!profileResult.ok) {
+        return badRequest(profileResult.error, profileResult.code);
+      }
+
+      admin = profileResult.admin;
+    }
+
+    let notificationPreferences = await getAdminNotificationPreferences(
+      env,
+      admin.id,
+      admin.organizationId
+    );
+
+    if (hasPrefs) {
+      if (!isRecord(prefsBody)) {
+        return badRequest("notificationPreferences must be a JSON object.");
+      }
+
+      const updateInput: { newSubmissions?: boolean; readyToSchedule?: boolean } = {};
+
+      if (prefsBody.newSubmissions !== undefined) {
+        if (typeof prefsBody.newSubmissions !== "boolean") {
+          return badRequest("notificationPreferences.newSubmissions must be a boolean.");
+        }
+
+        updateInput.newSubmissions = prefsBody.newSubmissions;
+      }
+
+      if (prefsBody.readyToSchedule !== undefined) {
+        if (typeof prefsBody.readyToSchedule !== "boolean") {
+          return badRequest("notificationPreferences.readyToSchedule must be a boolean.");
+        }
+
+        updateInput.readyToSchedule = prefsBody.readyToSchedule;
+      }
+
+      if (
+        updateInput.newSubmissions === undefined &&
+        updateInput.readyToSchedule === undefined
+      ) {
+        return badRequest("Provide at least one notification preference to update.");
+      }
+
+      notificationPreferences = await updateAdminNotificationPreferences(
+        env,
+        admin.id,
+        admin.organizationId,
+        updateInput
+      );
+
+      if (!notificationPreferences) {
+        return serverError("Unable to update notification preferences.");
+      }
+    }
+
+    const organization = await findActiveOrganizationById(env, admin.organizationId);
+
+    if (!organization) {
+      return serverError("Admin organization is not available.");
+    }
+
+    return json({
+      success: true,
+      data: {
+        admin,
+        organization: mapAdminSessionOrganization(organization),
+        notificationPreferences: notificationPreferences ?? {
+          newSubmissions: true,
+          readyToSchedule: false,
+          volunteerUpdated: false
+        }
+      }
+    });
+  } catch (error) {
+    console.error("Failed admin me patch", error);
+    return serverError("Unable to update profile.");
+  }
+}
+
+async function patchOrganization(request: Request, env: Env): Promise<Response> {
+  try {
+    const auth = await requireOwner(request, env);
+
+    if (auth.response) {
+      return auth.response;
+    }
+
+    const organization = await findActiveOrganizationById(env, auth.admin!.organizationId);
+
+    if (!organization) {
+      return serverError("Admin organization is not available.");
+    }
+
+    if (organization.slug === DEMO_ORGANIZATION_SLUG) {
+      return badRequest("The demo organization cannot be edited.");
+    }
+
+    let body: unknown;
+
+    try {
+      body = await request.json();
+    } catch {
+      return badRequest("Request body must be valid JSON.", "INVALID_JSON");
+    }
+
+    const validation = validateOrganizationProfileUpdate(body);
+
+    if (!validation.ok) {
+      return badRequest(validation.message, validation.code);
+    }
+
+    const updated = await updateOrganizationProfile(
+      env,
+      organization.id,
+      validation.value
+    );
+
+    if (!updated.ok) {
+      return badRequest(updated.error, updated.code);
+    }
+
+    const notificationPreferences = await getAdminNotificationPreferences(
+      env,
+      auth.admin!.id,
+      auth.admin!.organizationId
+    );
+
+    return json({
+      success: true,
+      data: {
+        admin: auth.admin,
+        organization: mapAdminSessionOrganization(updated.organization),
+        notificationPreferences: notificationPreferences ?? {
+          newSubmissions: true,
+          readyToSchedule: false,
+          volunteerUpdated: false
+        }
+      }
+    });
+  } catch (error) {
+    console.error("Failed organization profile update", error);
+    return serverError("Unable to update organization.");
   }
 }
 
@@ -710,6 +944,7 @@ async function putSubmission(
 }
 
 async function patchSubmission(
+  ctx: ExecutionContext,
   request: Request,
   env: Env,
   submissionId: number
@@ -767,10 +1002,38 @@ async function patchSubmission(
       return notFound();
     }
 
+    const becameReadyToSchedule =
+      updated.statusChanged === true &&
+      updated.previousStatus !== undefined &&
+      normalizeSubmissionStatus(updated.status) === "approved_ready_to_schedule" &&
+      normalizeSubmissionStatus(updated.previousStatus) !== "approved_ready_to_schedule";
+
+    if (becameReadyToSchedule) {
+      const organization = await findActiveOrganizationById(env, auth.admin!.organizationId);
+
+      if (organization) {
+        ctx.waitUntil(
+          notifyAdminsOfReadyToSchedule(
+            env,
+            {
+              organizationId: organization.id,
+              organizationSlug: organization.slug,
+              organizationName: organization.name,
+              submissionId
+            },
+            auth.admin!.id
+          )
+        );
+      }
+    }
+
+    const { previousStatus: _previousStatus, statusChanged: _statusChanged, ...submission } =
+      updated;
+
     return json({
       success: true,
       data: {
-        submission: updated
+        submission
       }
     });
   } catch (error) {

@@ -6,6 +6,7 @@ import {
 } from "../db/organizations";
 import { buildPublicVolunteerFormPayload, defaultSubmissionSuccessMessage } from "../db/publicVolunteerForm";
 import { createVolunteerSubmission } from "../db/volunteerSubmissions";
+import { notifyAdminsOfNewPublicSubmission } from "../notifications/submissionNotifications";
 import { DEMO_ORGANIZATION_SLUG } from "../constants/demo";
 import { badRequest, json, methodNotAllowed, serverError } from "../http/responses";
 import type { Env } from "../types";
@@ -23,7 +24,7 @@ const defaultVolunteerSubmissionsPath =
 export async function organizationRoutes(
   request: Request,
   env: Env,
-  _ctx: ExecutionContext
+  ctx: ExecutionContext
 ): Promise<Response> {
   const url = new URL(request.url);
   const pathname = url.pathname;
@@ -55,7 +56,7 @@ export async function organizationRoutes(
       return methodNotAllowed();
     }
 
-    return createSubmission(env, formSubmissionsMatch[1], formSubmissionsMatch[2], request);
+    return createSubmission(ctx, env, formSubmissionsMatch[1], formSubmissionsMatch[2], request);
   }
 
   const defaultSubmissionsMatch = pathname.match(defaultVolunteerSubmissionsPath);
@@ -65,7 +66,7 @@ export async function organizationRoutes(
       return methodNotAllowed();
     }
 
-    return createDefaultFormSubmission(env, defaultSubmissionsMatch[1], request);
+    return createDefaultFormSubmission(ctx, env, defaultSubmissionsMatch[1], request);
   }
 
   return organizationNotFound();
@@ -124,6 +125,7 @@ async function getFormBySlug(
 }
 
 async function createSubmission(
+  ctx: ExecutionContext,
   env: Env,
   organizationSlug: string,
   formSlug: string,
@@ -135,10 +137,11 @@ async function createSubmission(
     return resolved.response;
   }
 
-  return createSubmissionForForm(env, request, resolved.organization!, resolved.form!);
+  return createSubmissionForForm(ctx, env, request, resolved.organization!, resolved.form!);
 }
 
 async function createDefaultFormSubmission(
+  ctx: ExecutionContext,
   env: Env,
   organizationSlug: string,
   request: Request
@@ -155,10 +158,11 @@ async function createDefaultFormSubmission(
     return organizationNotFound("No active volunteer form was found for this organization.");
   }
 
-  return createSubmissionForForm(env, request, organization, form);
+  return createSubmissionForForm(ctx, env, request, organization, form);
 }
 
 async function createSubmissionForForm(
+  ctx: ExecutionContext,
   env: Env,
   request: Request,
   organization: NonNullable<Awaited<ReturnType<typeof findActiveOrganizationBySlug>>>,
@@ -196,6 +200,15 @@ async function createSubmissionForForm(
     }
 
     const submissionId = await createVolunteerSubmission(env, validation.input, scope);
+
+    ctx.waitUntil(
+      notifyAdminsOfNewPublicSubmission(env, {
+        organizationId: organization.id,
+        organizationSlug: organization.slug,
+        organizationName: organization.name,
+        submissionId
+      })
+    );
 
     return json(
       {

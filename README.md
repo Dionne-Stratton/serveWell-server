@@ -126,7 +126,9 @@ Legacy global routes (`GET /api/serving-areas`, `POST /api/volunteer-submissions
 | Method | Path | Notes |
 |--------|------|--------|
 | `POST` | `/api/admin/login` | Body: `organizationSlug`, `email`, `password` → `token`, `admin`, `organization` |
-| `GET` | `/api/admin/me` | Current admin + organization |
+| `GET` | `/api/admin/me` | Current admin + organization + `notificationPreferences` |
+| `PATCH` | `/api/admin/me` | Body: `{ notificationPreferences: { newSubmissions?, readyToSchedule? } }` |
+| `PATCH` | `/api/admin/organization` | **Owner only** — update org name, type, contact email, website (slug not editable); demo blocked |
 | `DELETE` | `/api/admin/organization` | **Owner only** — permanent org delete; body `{ confirmSlug }`; demo blocked; cascades all org data |
 | `POST` | `/api/admin/request-password-reset` | Authenticated; emails reset link to signed-in admin |
 | `GET` | `/api/admin/team` | Members + pending invites; `canManage` when role is `owner` |

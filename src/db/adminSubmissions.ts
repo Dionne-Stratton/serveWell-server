@@ -122,6 +122,9 @@ export interface AdminSubmissionMutationResult {
   updatedAt: string;
   intakeUpdatedAt: string;
   updatedBy: AdminActorSummary | null;
+  /** Set when a status PATCH changed workflow status. */
+  previousStatus?: string;
+  statusChanged?: boolean;
 }
 
 interface AdminSubmissionRow {
@@ -676,7 +679,21 @@ export async function updateAdminSubmission(
     .bind(status, isArchived ? 1 : 0, adminUserId, submissionId, organizationId)
     .run();
 
-  return getAdminSubmissionMutationResult(env, submissionId, organizationId);
+  const result = await getAdminSubmissionMutationResult(env, submissionId, organizationId);
+
+  if (!result) {
+    return null;
+  }
+
+  if (statusChanged) {
+    return {
+      ...result,
+      previousStatus: existing.status,
+      statusChanged: true
+    };
+  }
+
+  return result;
 }
 
 async function getAdminSubmissionMutationResult(
