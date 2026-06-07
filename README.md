@@ -127,6 +127,7 @@ Legacy global routes (`GET /api/serving-areas`, `POST /api/volunteer-submissions
 |--------|------|--------|
 | `POST` | `/api/admin/login` | Body: `organizationSlug`, `email`, `password` → `token`, `admin`, `organization` |
 | `GET` | `/api/admin/me` | Current admin + organization |
+| `DELETE` | `/api/admin/organization` | **Owner only** — permanent org delete; body `{ confirmSlug }`; demo blocked; cascades all org data |
 | `POST` | `/api/admin/request-password-reset` | Authenticated; emails reset link to signed-in admin |
 | `GET` | `/api/admin/team` | Members + pending invites; `canManage` when role is `owner` |
 | `POST` | `/api/admin/team/invites` | Owner only; invite admin by email (7-day token, Resend) |
@@ -180,6 +181,7 @@ Creates an **organization profile**, the **first admin user**, and a **default v
 |--------|------|--------|
 | `POST` | `/api/auth/register` | Returns `201` with `token`, `admin`, `organization` (same shape as login) |
 | `POST` | `/api/auth/forgot-password` | Body: `organizationSlug`, `email` (generic success message) |
+| `POST` | `/api/auth/church-slug-hint` | Body: `email` — emails church name(s) and URL slug(s) for sign-in (generic success message) |
 | `POST` | `/api/auth/reset-password` | Body: `token`, `newPassword` |
 | `GET` | `/api/auth/accept-invite?token=` | Preview invite (org name, email) |
 | `POST` | `/api/auth/accept-invite` | Body: `token`, `newPassword`, `confirmPassword` → login payload |

@@ -1,7 +1,9 @@
 import { requireAdmin } from "../auth/adminGuard";
+import { requireOwner } from "../auth/adminOwnerGuard";
 import { signAdminJwt } from "../auth/jwt";
 import { verifyPassword } from "../auth/passwords";
 import { findActiveAdminByOrganizationSlugAndEmail } from "../db/adminUsers";
+import { permanentlyDeleteOrganization } from "../db/organizationDelete";
 import {
   findActiveOrganizationById,
   mapAdminSessionOrganization,
@@ -71,6 +73,14 @@ export async function adminRoutes(
     }
 
     return me(request, env);
+  }
+
+  if (url.pathname === "/api/admin/organization") {
+    if (request.method === "DELETE") {
+      return deleteOrganization(request, env);
+    }
+
+    return methodNotAllowed();
   }
 
   const teamResponse = await tryAdminTeamRoute(request, env, url.pathname);
@@ -288,6 +298,63 @@ async function me(request: Request, env: Env): Promise<Response> {
   } catch (error) {
     console.error("Failed admin me lookup", error);
     return serverError("Unable to load admin profile.");
+  }
+}
+
+async function deleteOrganization(request: Request, env: Env): Promise<Response> {
+  try {
+    const auth = await requireOwner(request, env);
+
+    if (auth.response) {
+      return auth.response;
+    }
+
+    const organization = await findActiveOrganizationById(env, auth.admin!.organizationId);
+
+    if (!organization) {
+      return serverError("Admin organization is not available.");
+    }
+
+    if (organization.slug === DEMO_ORGANIZATION_SLUG) {
+      return badRequest("The demo organization cannot be deleted.");
+    }
+
+    let body: unknown;
+
+    try {
+      body = await request.json();
+    } catch {
+      return badRequest("Request body must be valid JSON.", "INVALID_JSON");
+    }
+
+    const confirmSlug =
+      typeof body === "object" && body !== null && "confirmSlug" in body
+        ? normalizeRequiredString((body as { confirmSlug: unknown }).confirmSlug)
+        : null;
+
+    if (!confirmSlug) {
+      return badRequest("confirmSlug is required.");
+    }
+
+    if (confirmSlug !== organization.slug) {
+      return badRequest("Confirmation slug does not match this organization.");
+    }
+
+    const deleted = await permanentlyDeleteOrganization(env, organization.id);
+
+    if (!deleted) {
+      return serverError("Unable to delete this organization.");
+    }
+
+    return json({
+      success: true,
+      data: {
+        deleted: true
+      }
+    });
+  } catch (error) {
+    console.error("Failed organization delete", error);
+    return serverError("Unable to delete organization.");
   }
 }
 

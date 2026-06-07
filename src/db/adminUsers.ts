@@ -14,6 +14,35 @@ export interface AdminUserWithPassword extends AdminUser {
   passwordHash: string;
 }
 
+export interface AdminOrganizationSummary {
+  slug: string;
+  name: string;
+}
+
+export async function listActiveOrganizationsForAdminEmail(
+  env: Env,
+  email: string
+): Promise<AdminOrganizationSummary[]> {
+  const result = await env.DB.prepare(
+    `
+    SELECT o.slug, o.name
+    FROM admin_users au
+    INNER JOIN organizations o ON o.id = au.organization_id
+    WHERE lower(au.email) = lower(?)
+      AND au.is_active = 1
+      AND o.is_active = 1
+    ORDER BY o.id ASC
+    `
+  )
+    .bind(email.trim())
+    .all<{ slug: string; name: string }>();
+
+  return (result.results ?? []).map((row) => ({
+    slug: row.slug,
+    name: row.name
+  }));
+}
+
 export async function findActiveAdminByOrganizationSlugAndEmail(
   env: Env,
   organizationSlug: string,

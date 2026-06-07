@@ -1,5 +1,6 @@
 import { acceptAdminInvite, previewAdminInvite } from "../auth/adminInviteAccept";
 import { signAdminJwt } from "../auth/jwt";
+import { requestChurchSlugHintForEmail } from "../auth/churchSlugHint";
 import { completePasswordReset, requestPasswordResetForEmail } from "../auth/passwordReset";
 import {
   createOrganizationWithAdmin,
@@ -13,6 +14,9 @@ import { validateOrganizationRegistration } from "../validation/organizationRegi
 
 const PASSWORD_RESET_ACK =
   "If an account exists for that email, we sent password reset instructions.";
+
+const CHURCH_SLUG_HINT_ACK =
+  "If an account exists for that email, we sent a reminder with your church name and URL slug.";
 
 export async function authRoutes(
   request: Request,
@@ -52,6 +56,14 @@ export async function authRoutes(
     }
 
     return forgotPassword(request, env);
+  }
+
+  if (url.pathname === "/api/auth/church-slug-hint") {
+    if (request.method !== "POST") {
+      return methodNotAllowed();
+    }
+
+    return churchSlugHint(request, env);
   }
 
   if (url.pathname === "/api/auth/reset-password") {
@@ -164,6 +176,38 @@ async function forgotPassword(request: Request, env: Env): Promise<Response> {
   } catch (error) {
     console.error("Failed forgot password", error);
     return serverError("Unable to process password reset request.");
+  }
+}
+
+async function churchSlugHint(request: Request, env: Env): Promise<Response> {
+  let body: unknown;
+
+  try {
+    body = await request.json();
+  } catch {
+    return badRequest("Request body must be valid JSON.", "INVALID_JSON");
+  }
+
+  if (!isRecord(body)) {
+    return badRequest("Request body must be a JSON object.");
+  }
+
+  const email = normalizeRequiredString(body.email)?.toLowerCase();
+
+  if (!email) {
+    return badRequest("Email is required.");
+  }
+
+  try {
+    await requestChurchSlugHintForEmail(env, email);
+
+    return json({
+      success: true,
+      data: { message: CHURCH_SLUG_HINT_ACK }
+    });
+  } catch (error) {
+    console.error("Failed church slug hint", error);
+    return serverError("Unable to process sign-in reminder request.");
   }
 }
 
