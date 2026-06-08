@@ -1,6 +1,9 @@
 import type { Env } from "../types";
 
-export type SubmissionNotificationEvent = "new_submission" | "ready_to_schedule";
+export type SubmissionNotificationEvent =
+  | "new_submission"
+  | "ready_to_schedule"
+  | "volunteer_updated";
 
 export interface SubmissionNotificationEmailInput {
   to: string;
@@ -57,12 +60,20 @@ function buildSubject(input: SubmissionNotificationEmailInput): string {
     return `New volunteer submission — ${input.organizationName}`;
   }
 
+  if (input.event === "volunteer_updated") {
+    return `Volunteer updated submission — ${input.volunteerName} (${input.organizationName})`;
+  }
+
   return `Ready to schedule — ${input.volunteerName} (${input.organizationName})`;
 }
 
 function buildEventLine(input: SubmissionNotificationEmailInput): string {
   if (input.event === "new_submission") {
     return `A new volunteer submitted your public form. Status: ${input.statusLabel}.`;
+  }
+
+  if (input.event === "volunteer_updated") {
+    return "A volunteer updated their submission using a secure link. Please review the changes.";
   }
 
   return `${input.volunteerName} was marked ${input.statusLabel}.`;

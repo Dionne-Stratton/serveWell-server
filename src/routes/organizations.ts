@@ -5,6 +5,7 @@ import {
   findVolunteerFormBySlug
 } from "../db/organizations";
 import { buildPublicVolunteerFormPayload, defaultSubmissionSuccessMessage } from "../db/publicVolunteerForm";
+import { findMostRecentActiveSubmissionByFormAndEmail } from "../db/volunteerSubmissionLookup";
 import { createVolunteerSubmission } from "../db/volunteerSubmissions";
 import { notifyAdminsOfNewPublicSubmission } from "../notifications/submissionNotifications";
 import { DEMO_ORGANIZATION_SLUG } from "../constants/demo";
@@ -197,6 +198,19 @@ async function createSubmissionForForm(
 
     if (!validation.input) {
       return badRequest(validation.error ?? "Invalid volunteer submission.");
+    }
+
+    const existing = await findMostRecentActiveSubmissionByFormAndEmail(
+      env,
+      scope.formId,
+      validation.input.email ?? ""
+    );
+
+    if (existing) {
+      return badRequest(
+        "We already have a submission for this email on this form. Use “Already submitted?” below to request an update link instead of submitting again.",
+        "DUPLICATE_SUBMISSION"
+      );
     }
 
     const submissionId = await createVolunteerSubmission(env, validation.input, scope);

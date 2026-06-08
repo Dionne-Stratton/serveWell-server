@@ -12,7 +12,12 @@ import type {
   VolunteerInterestInput,
   VolunteerSubmissionScope
 } from "../db/volunteerSubmissions";
+import { isEmailUsedByOtherActiveSubmission } from "../db/volunteerSubmissionLookup";
 import type { Env } from "../types";
+
+export interface ValidateVolunteerSubmissionOptions {
+  excludeSubmissionId?: number;
+}
 
 interface RequirementRow {
   serving_area_id: number;
@@ -35,7 +40,8 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export async function validateVolunteerSubmission(
   env: Env,
   body: unknown,
-  scope: VolunteerSubmissionScope
+  scope: VolunteerSubmissionScope,
+  options?: ValidateVolunteerSubmissionOptions
 ): Promise<ValidationResult> {
   if (!isRecord(body)) {
     return { error: "Request body must be a JSON object." };
@@ -110,6 +116,22 @@ export async function validateVolunteerSubmission(
 
   if (servingAreaError) {
     return { error: servingAreaError };
+  }
+
+  if (typeof options?.excludeSubmissionId === "number") {
+    const taken = await isEmailUsedByOtherActiveSubmission(
+      env,
+      scope.formId,
+      email,
+      options.excludeSubmissionId
+    );
+
+    if (taken) {
+      return {
+        error:
+          "That email is already on file for this form. Use a different email or contact the church office."
+      };
+    }
   }
 
   return {

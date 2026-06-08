@@ -1,6 +1,7 @@
 import { adminRoutes } from "./admin";
 import { authRoutes } from "./auth";
 import { organizationRoutes } from "./organizations";
+import { tryPublicVolunteerSubmissionEditRoute } from "./publicVolunteerSubmissionEdit";
 import { planningCenterRoutes } from "./planningCenter";
 import { volunteerRoutes } from "./volunteers";
 import { json, notFound } from "../http/responses";
@@ -32,6 +33,17 @@ export async function routeRequest(
         version: "0.1.0"
       }
     });
+  }
+
+  const volunteerSelfEditResponse = await tryPublicVolunteerSubmissionEditRoute(
+    request,
+    env,
+    ctx,
+    url.pathname
+  );
+
+  if (volunteerSelfEditResponse) {
+    return volunteerSelfEditResponse;
   }
 
   if (url.pathname.startsWith("/api/organizations/")) {

@@ -78,6 +78,34 @@ export async function findActiveOrganizationBySlug(
   return row ? mapOrganization(row) : null;
 }
 
+export async function findVolunteerFormById(
+  env: Env,
+  organizationId: number,
+  formId: number
+): Promise<VolunteerForm | null> {
+  const row = await env.DB.prepare(
+    `
+    SELECT
+      id,
+      organization_id,
+      slug,
+      name,
+      description,
+      intro_text,
+      success_message,
+      template_key,
+      is_default,
+      is_active
+    FROM volunteer_forms
+    WHERE organization_id = ? AND id = ?
+    `
+  )
+    .bind(organizationId, formId)
+    .first<VolunteerFormRow>();
+
+  return row ? mapVolunteerForm(row) : null;
+}
+
 export async function findVolunteerFormBySlug(
   env: Env,
   organizationId: number,

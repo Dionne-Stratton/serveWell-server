@@ -34,6 +34,8 @@ export interface AdminSubmissionListItem {
   requiresBackgroundCheck: boolean;
   requiresTraining: boolean;
   createdAt: string;
+  volunteerSelfUpdatedAt: string | null;
+  volunteerUpdateReviewNeeded: boolean;
   staffNotes: AdminSubmissionStaffNote[];
 }
 
@@ -62,6 +64,10 @@ export interface AdminSubmissionDetail {
     createdAt: string;
     updatedAt: string;
     updatedBy: AdminActorSummary | null;
+    volunteerSelfUpdatedAt: string | null;
+    volunteerUpdateReviewNeeded: boolean;
+    volunteerUpdateReviewedAt: string | null;
+    volunteerUpdateReviewedBy: AdminActorSummary | null;
   };
   interests: Array<{
     id: number;
@@ -145,6 +151,8 @@ interface AdminSubmissionRow {
   requires_background_check: number;
   requires_training: number;
   created_at: string;
+  volunteer_self_updated_at: string | null;
+  volunteer_update_review_needed: number;
 }
 
 interface AdminSubmissionDetailRow {
@@ -174,6 +182,12 @@ interface AdminSubmissionDetailRow {
   created_at: string;
   updated_at: string;
   intake_updated_at: string | null;
+  volunteer_self_updated_at: string | null;
+  volunteer_update_review_needed: number;
+  volunteer_update_reviewed_at: string | null;
+  volunteer_update_reviewed_by_admin_user_id: number | null;
+  volunteer_update_reviewed_by_display_name: string | null;
+  volunteer_update_reviewed_by_email: string | null;
   availability: string | null;
 }
 
@@ -286,6 +300,8 @@ export async function listAdminSubmissions(
       vs.status,
       vs.is_archived,
       vs.created_at,
+      vs.volunteer_self_updated_at,
+      vs.volunteer_update_review_needed,
       GROUP_CONCAT(DISTINCT COALESCE(sa.name, vi.serving_area_name)) AS serving_areas,
       GROUP_CONCAT(DISTINCT va.availability_key) AS availability,
       MAX(sa.requires_background_check) AS requires_background_check,
@@ -354,12 +370,20 @@ export async function getAdminSubmissionDetail(
       vs.created_at,
       vs.updated_at,
       vs.intake_updated_at,
+      vs.volunteer_self_updated_at,
+      vs.volunteer_update_review_needed,
+      vs.volunteer_update_reviewed_at,
+      vs.volunteer_update_reviewed_by_admin_user_id,
+      review_admin.display_name AS volunteer_update_reviewed_by_display_name,
+      review_admin.email AS volunteer_update_reviewed_by_email,
       GROUP_CONCAT(DISTINCT va.availability_key) AS availability
     FROM volunteer_submissions vs
     INNER JOIN volunteer_forms vf
       ON vf.id = vs.form_id
     LEFT JOIN admin_users updated_admin
       ON updated_admin.id = vs.updated_by_admin_user_id
+    LEFT JOIN admin_users review_admin
+      ON review_admin.id = vs.volunteer_update_reviewed_by_admin_user_id
     LEFT JOIN admin_users pc_sync_admin
       ON pc_sync_admin.id = vs.planning_center_synced_by_admin_user_id
     LEFT JOIN volunteer_availability va
@@ -424,6 +448,14 @@ export async function getAdminSubmissionDetail(
         intakeUpdatedAt:
           submission.intake_updated_at ?? submission.updated_at
       }),
+      volunteerSelfUpdatedAt: submission.volunteer_self_updated_at ?? null,
+      volunteerUpdateReviewNeeded: Boolean(submission.volunteer_update_review_needed),
+      volunteerUpdateReviewedAt: submission.volunteer_update_reviewed_at ?? null,
+      volunteerUpdateReviewedBy: mapAdminActorFromJoin(
+        submission.volunteer_update_reviewed_by_admin_user_id,
+        submission.volunteer_update_reviewed_by_display_name,
+        submission.volunteer_update_reviewed_by_email
+      )
     },
     interests,
     requirementConfirmations: confirmations,
@@ -856,8 +888,36 @@ function mapAdminSubmissionListItem(
     requiresBackgroundCheck: Boolean(row.requires_background_check),
     requiresTraining: Boolean(row.requires_training),
     createdAt: row.created_at,
+    volunteerSelfUpdatedAt: row.volunteer_self_updated_at ?? null,
+    volunteerUpdateReviewNeeded: Boolean(row.volunteer_update_review_needed),
     staffNotes,
   };
+}
+
+export async function markVolunteerUpdateReviewed(
+  env: Env,
+  submissionId: number,
+  organizationId: number,
+  adminUserId: number
+): Promise<boolean> {
+  const result = await env.DB.prepare(
+    `
+    UPDATE volunteer_submissions
+    SET
+      volunteer_update_review_needed = 0,
+      volunteer_update_reviewed_at = CURRENT_TIMESTAMP,
+      volunteer_update_reviewed_by_admin_user_id = ?,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+      AND organization_id = ?
+      AND is_archived = 0
+      AND volunteer_update_review_needed = 1
+    `
+  )
+    .bind(adminUserId, submissionId, organizationId)
+    .run();
+
+  return (result.meta.changes ?? 0) > 0;
 }
 
 function splitGroupConcat(value: string | null): string[] {

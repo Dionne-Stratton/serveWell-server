@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS admin_users (
   session_version INTEGER NOT NULL DEFAULT 0,
   notify_new_submissions INTEGER NOT NULL DEFAULT 1,
   notify_ready_to_schedule INTEGER NOT NULL DEFAULT 0,
-  notify_volunteer_updated INTEGER NOT NULL DEFAULT 0,
+  notify_volunteer_updated INTEGER NOT NULL DEFAULT 1,
   notify_admin_joined INTEGER NOT NULL DEFAULT 0,
   last_login_at TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -129,11 +129,25 @@ CREATE TABLE IF NOT EXISTS volunteer_submissions (
   planning_center_synced_at TEXT,
   planning_center_synced_by_admin_user_id INTEGER,
   intake_updated_at TEXT,
+  volunteer_self_updated_at TEXT,
+  volunteer_update_review_needed INTEGER NOT NULL DEFAULT 0,
+  volunteer_update_reviewed_at TEXT,
+  volunteer_update_reviewed_by_admin_user_id INTEGER,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CHECK (email IS NOT NULL OR phone IS NOT NULL),
   FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
   FOREIGN KEY (form_id) REFERENCES volunteer_forms(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS volunteer_submission_edit_tokens (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  submission_id INTEGER NOT NULL,
+  token_hash TEXT NOT NULL UNIQUE,
+  expires_at TEXT NOT NULL,
+  consumed_at TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (submission_id) REFERENCES volunteer_submissions(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS volunteer_interests (
@@ -320,3 +334,9 @@ CREATE INDEX IF NOT EXISTS idx_oauth_states_state_provider
 
 CREATE INDEX IF NOT EXISTS idx_oauth_states_expiry
   ON oauth_states (expires_at);
+
+CREATE INDEX IF NOT EXISTS idx_volunteer_edit_tokens_hash
+  ON volunteer_submission_edit_tokens (token_hash);
+
+CREATE INDEX IF NOT EXISTS idx_volunteer_edit_tokens_submission
+  ON volunteer_submission_edit_tokens (submission_id);

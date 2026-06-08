@@ -73,6 +73,9 @@ Migrations live in `migrations/`:
 - `0002_seed_demo_organization_and_form.sql` — org `demo`, form `general-serving`, demo **owner** admin
 - `0003_seed_demo_serving_areas.sql` — demo form sections, serving areas, and requirements
 - `0004_seed_demo_sample_submissions.sql` — demo dashboard sample rows
+- `0005_volunteer_self_edit.sql` — `volunteer_self_updated_at` on submissions and `volunteer_submission_edit_tokens` for volunteer self-edit links
+- `0006_volunteer_updated_notify_default.sql` — enable `notify_volunteer_updated` for existing admins (new signups default on in schema)
+- `0007_volunteer_update_review.sql` — volunteer update review flag and reviewed metadata on submissions
 
 **Email (Resend):** set `RESEND_API_KEY` (and optionally `RESEND_FROM`) on the Worker. Without a key, local dev logs password-reset URLs to the console and skips other outbound mail.
 

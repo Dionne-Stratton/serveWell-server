@@ -3,7 +3,6 @@ import type { Env } from "../types";
 export interface AdminNotificationPreferences {
   newSubmissions: boolean;
   readyToSchedule: boolean;
-  /** Stored for future volunteer self-edit notifications; not sent yet. */
   volunteerUpdated: boolean;
   /** Owner-only: email when an invited admin accepts and joins. */
   adminJoined: boolean;
@@ -51,6 +50,7 @@ export async function getAdminNotificationPreferences(
 export interface UpdateAdminNotificationPreferencesInput {
   newSubmissions?: boolean;
   readyToSchedule?: boolean;
+  volunteerUpdated?: boolean;
   adminJoined?: boolean;
 }
 
@@ -72,6 +72,10 @@ export async function updateAdminNotificationPreferences(
     typeof input.readyToSchedule === "boolean"
       ? input.readyToSchedule
       : current.readyToSchedule;
+  const nextVolunteerUpdated =
+    typeof input.volunteerUpdated === "boolean"
+      ? input.volunteerUpdated
+      : current.volunteerUpdated;
   const nextAdminJoined =
     typeof input.adminJoined === "boolean" ? input.adminJoined : current.adminJoined;
 
@@ -81,6 +85,7 @@ export async function updateAdminNotificationPreferences(
     SET
       notify_new_submissions = ?,
       notify_ready_to_schedule = ?,
+      notify_volunteer_updated = ?,
       notify_admin_joined = ?,
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ? AND organization_id = ? AND is_active = 1
@@ -89,6 +94,7 @@ export async function updateAdminNotificationPreferences(
     .bind(
       nextNew ? 1 : 0,
       nextReady ? 1 : 0,
+      nextVolunteerUpdated ? 1 : 0,
       nextAdminJoined ? 1 : 0,
       adminUserId,
       organizationId
@@ -142,6 +148,30 @@ export async function listAdminsForSubmissionNotification(
       : await statement
           .bind(organizationId)
           .all<{ id: number; email: string; display_name: string }>();
+
+  return (result.results ?? []).map((row) => ({
+    id: row.id,
+    email: row.email,
+    displayName: row.display_name
+  }));
+}
+
+export async function listAdminsForVolunteerUpdatedNotification(
+  env: Env,
+  organizationId: number
+): Promise<AdminNotificationRecipient[]> {
+  const result = await env.DB.prepare(
+    `
+    SELECT id, email, display_name
+    FROM admin_users
+    WHERE organization_id = ?
+      AND is_active = 1
+      AND notify_volunteer_updated = 1
+    ORDER BY id ASC
+    `
+  )
+    .bind(organizationId)
+    .all<{ id: number; email: string; display_name: string }>();
 
   return (result.results ?? []).map((row) => ({
     id: row.id,

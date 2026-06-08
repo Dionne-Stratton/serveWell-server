@@ -148,6 +148,69 @@ export async function replaceVolunteerSubmissionContent(
   return true;
 }
 
+export async function replaceVolunteerSubmissionByVolunteer(
+  env: Env,
+  submissionId: number,
+  organizationId: number,
+  formId: number,
+  input: CreateVolunteerSubmissionInput
+): Promise<boolean> {
+  const update = await env.DB.prepare(
+    `
+    UPDATE volunteer_submissions
+    SET
+      first_name = ?,
+      last_name = ?,
+      email = ?,
+      phone = ?,
+      preferred_contact_method = ?,
+      overall_frequency = ?,
+      open_to_special_events = ?,
+      experience_notes = ?,
+      additional_notes = ?,
+      volunteer_self_updated_at = CURRENT_TIMESTAMP,
+      volunteer_update_review_needed = 1,
+      volunteer_update_reviewed_at = NULL,
+      volunteer_update_reviewed_by_admin_user_id = NULL,
+      updated_at = CURRENT_TIMESTAMP,
+      intake_updated_at = CURRENT_TIMESTAMP,
+      updated_by_admin_user_id = NULL
+    WHERE id = ? AND organization_id = ? AND form_id = ? AND is_archived = 0
+    `
+  )
+    .bind(
+      input.firstName,
+      input.lastName,
+      input.email,
+      input.phone,
+      input.preferredContactMethod,
+      input.overallFrequency,
+      input.openToSpecialEvents ? 1 : 0,
+      input.experienceNotes,
+      input.additionalNotes,
+      submissionId,
+      organizationId,
+      formId
+    )
+    .run();
+
+  if ((update.meta.changes ?? 0) === 0) {
+    return false;
+  }
+
+  await env.DB.batch([
+    env.DB.prepare(`DELETE FROM volunteer_interests WHERE submission_id = ?`).bind(submissionId),
+    env.DB.prepare(`DELETE FROM volunteer_availability WHERE submission_id = ?`).bind(submissionId),
+    env.DB.prepare(`DELETE FROM volunteer_requirement_confirmations WHERE submission_id = ?`).bind(
+      submissionId
+    )
+  ]);
+
+  const scope: VolunteerSubmissionScope = { organizationId, formId };
+  await insertVolunteerSubmissionChildren(env, submissionId, scope, input);
+  return true;
+}
+
 async function insertVolunteerSubmissionChildren(
   env: Env,
   submissionId: number,

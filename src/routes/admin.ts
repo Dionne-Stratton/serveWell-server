@@ -43,6 +43,7 @@ import {
   deleteAdminSubmission,
   getAdminSubmissionDetail,
   listAdminSubmissions,
+  markVolunteerUpdateReviewed,
   touchSubmissionAdminActivity,
   updateAdminSubmission
 } from "../db/adminSubmissions";
@@ -160,6 +161,20 @@ export async function adminRoutes(
     }
 
     return methodNotAllowed();
+  }
+
+  const markVolunteerUpdateReviewedMatch = url.pathname.match(
+    /^\/api\/admin\/submissions\/(\d+)\/mark-volunteer-update-reviewed$/
+  );
+
+  if (markVolunteerUpdateReviewedMatch) {
+    const submissionId = Number(markVolunteerUpdateReviewedMatch[1]);
+
+    if (request.method !== "POST") {
+      return methodNotAllowed();
+    }
+
+    return postMarkVolunteerUpdateReviewed(request, env, submissionId);
   }
 
   const planningCenterPushMatch = url.pathname.match(
@@ -321,7 +336,7 @@ async function me(request: Request, env: Env): Promise<Response> {
         notificationPreferences: notificationPreferences ?? {
           newSubmissions: true,
           readyToSchedule: false,
-          volunteerUpdated: false,
+          volunteerUpdated: true,
           adminJoined: auth.admin!.role === "owner"
         }
       }
@@ -412,6 +427,7 @@ async function patchMe(request: Request, env: Env): Promise<Response> {
       const updateInput: {
         newSubmissions?: boolean;
         readyToSchedule?: boolean;
+        volunteerUpdated?: boolean;
         adminJoined?: boolean;
       } = {};
 
@@ -431,6 +447,14 @@ async function patchMe(request: Request, env: Env): Promise<Response> {
         updateInput.readyToSchedule = prefsBody.readyToSchedule;
       }
 
+      if (prefsBody.volunteerUpdated !== undefined) {
+        if (typeof prefsBody.volunteerUpdated !== "boolean") {
+          return badRequest("notificationPreferences.volunteerUpdated must be a boolean.");
+        }
+
+        updateInput.volunteerUpdated = prefsBody.volunteerUpdated;
+      }
+
       if (prefsBody.adminJoined !== undefined) {
         if (auth.admin!.role !== "owner") {
           return badRequest("Only the organization owner can change admin joined notifications.");
@@ -446,6 +470,7 @@ async function patchMe(request: Request, env: Env): Promise<Response> {
       if (
         updateInput.newSubmissions === undefined &&
         updateInput.readyToSchedule === undefined &&
+        updateInput.volunteerUpdated === undefined &&
         updateInput.adminJoined === undefined
       ) {
         return badRequest("Provide at least one notification preference to update.");
@@ -477,7 +502,7 @@ async function patchMe(request: Request, env: Env): Promise<Response> {
         notificationPreferences: notificationPreferences ?? {
           newSubmissions: true,
           readyToSchedule: false,
-          volunteerUpdated: false,
+          volunteerUpdated: true,
           adminJoined: admin.role === "owner"
         }
       }
@@ -544,7 +569,7 @@ async function patchOrganization(request: Request, env: Env): Promise<Response> 
         notificationPreferences: notificationPreferences ?? {
           newSubmissions: true,
           readyToSchedule: false,
-          volunteerUpdated: false,
+          volunteerUpdated: true,
           adminJoined: auth.admin!.role === "owner"
         }
       }
@@ -846,6 +871,52 @@ async function patchForm(request: Request, env: Env, formId: number): Promise<Re
   } catch (error) {
     console.error("Failed admin form update", error);
     return serverError("Unable to update form.");
+  }
+}
+
+async function postMarkVolunteerUpdateReviewed(
+  request: Request,
+  env: Env,
+  submissionId: number
+): Promise<Response> {
+  try {
+    const auth = await requireAdmin(request, env);
+
+    if (auth.response) {
+      return auth.response;
+    }
+
+    const marked = await markVolunteerUpdateReviewed(
+      env,
+      submissionId,
+      auth.admin!.organizationId,
+      auth.admin!.id
+    );
+
+    if (!marked) {
+      return badRequest(
+        "This submission does not have a volunteer update waiting for review.",
+        "NO_VOLUNTEER_UPDATE_REVIEW_PENDING"
+      );
+    }
+
+    const detail = await getAdminSubmissionDetail(
+      env,
+      submissionId,
+      auth.admin!.organizationId
+    );
+
+    if (!detail) {
+      return notFound();
+    }
+
+    return json({
+      success: true,
+      data: detail
+    });
+  } catch (error) {
+    console.error("Failed to mark volunteer update reviewed", error);
+    return serverError("Unable to mark volunteer update as reviewed.");
   }
 }
 
