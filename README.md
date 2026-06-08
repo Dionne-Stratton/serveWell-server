@@ -74,7 +74,9 @@ Migrations live in `migrations/`:
 - `0003_seed_demo_serving_areas.sql` — demo form sections, serving areas, and requirements
 - `0004_seed_demo_sample_submissions.sql` — demo dashboard sample rows
 
-**Password reset email:** set `RESEND_API_KEY` (and optionally `RESEND_FROM`) on the Worker. Without a key, local dev logs the reset URL to the console.
+**Email (Resend):** set `RESEND_API_KEY` (and optionally `RESEND_FROM`) on the Worker. Without a key, local dev logs password-reset URLs to the console and skips other outbound mail.
+
+**Founder signup alerts:** set `FOUNDER_NOTIFY_EMAIL` (and `RESEND_API_KEY`) to receive an email on every `POST /api/auth/register`. Failures are logged only; signup still succeeds.
 
 **Remote D1:** `d1:migrations:apply:remote` changes production data. Run it only when you intend to update the deployed database.
 

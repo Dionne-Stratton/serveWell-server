@@ -1,5 +1,6 @@
 import { acceptAdminInvite, previewAdminInvite } from "../auth/adminInviteAccept";
 import { notifyOwnersOfAdminJoined } from "../notifications/adminJoinedNotifications";
+import { notifyFounderOfOrganizationSignup } from "../notifications/founderOrganizationSignup";
 import { signAdminJwt } from "../auth/jwt";
 import { requestChurchSlugHintForEmail } from "../auth/churchSlugHint";
 import { completePasswordReset, requestPasswordResetForEmail } from "../auth/passwordReset";
@@ -31,7 +32,7 @@ export async function authRoutes(
       return methodNotAllowed();
     }
 
-    return registerOrganization(request, env);
+    return registerOrganization(request, env, ctx);
   }
 
   if (url.pathname === "/api/auth/login") {
@@ -93,7 +94,11 @@ export async function authRoutes(
   );
 }
 
-async function registerOrganization(request: Request, env: Env): Promise<Response> {
+async function registerOrganization(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext
+): Promise<Response> {
   let body: unknown;
 
   try {
@@ -129,6 +134,17 @@ async function registerOrganization(request: Request, env: Env): Promise<Respons
     }
 
     const token = await signAdminJwt(admin, env);
+
+    const signedUpAt = new Date().toISOString();
+    ctx.waitUntil(
+      notifyFounderOfOrganizationSignup(env, {
+        organizationName: created.organization.name,
+        organizationSlug: created.organization.slug,
+        ownerDisplayName: admin.displayName,
+        ownerEmail: admin.email,
+        signedUpAt
+      })
+    );
 
     return json(
       {

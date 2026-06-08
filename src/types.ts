@@ -9,6 +9,8 @@ export interface Env {
   PLANNING_CENTER_REDIRECT_URI_LOCAL?: string;
   RESEND_API_KEY?: string;
   RESEND_FROM?: string;
+  /** Founder inbox for new organization signup notifications (Resend). */
+  FOUNDER_NOTIFY_EMAIL?: string;
 }
 
 export interface ApiResponseBody<T = unknown> {
