@@ -47,18 +47,21 @@ INSERT INTO admin_users (
   password_hash,
   display_name,
   role,
+  notify_admin_joined,
   is_active
 ) VALUES (
   1,
   'church@example.com',
   'sha256$servewell-demo-admin-v2$AKpxxkopvoifk4qqWOa7VaKMbNWT7FUeNslmIta6JJE=',
   'Church Admin',
-  'admin',
+  'owner',
+  1,
   1
 )
 ON CONFLICT(organization_id, email) DO UPDATE SET
   password_hash = excluded.password_hash,
   display_name = excluded.display_name,
   role = excluded.role,
+  notify_admin_joined = excluded.notify_admin_joined,
   is_active = excluded.is_active,
   updated_at = CURRENT_TIMESTAMP;

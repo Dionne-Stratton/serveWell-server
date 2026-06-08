@@ -69,24 +69,46 @@ For product direction and request/response shapes, see the sibling docs in the p
 
 Migrations live in `migrations/`:
 
-- `0001_saas_schema.sql` — organizations, forms, scoped serving areas/submissions
-- `0002_seed_demo_organization_and_form.sql` — org `demo`, form `general-serving`, demo admin
-- `0003_seed_demo_serving_areas.sql` — demo serving areas and requirements
+- `0001_schema.sql` — full ServeWell schema (organizations, forms, sections, submissions, Planning Center OAuth, admin invites, password reset, notification prefs, and related indexes)
+- `0002_seed_demo_organization_and_form.sql` — org `demo`, form `general-serving`, demo **owner** admin
+- `0003_seed_demo_serving_areas.sql` — demo form sections, serving areas, and requirements
 - `0004_seed_demo_sample_submissions.sql` — demo dashboard sample rows
-- `0005_form_sections.sql` — form sections (group headings), serving areas linked to sections
-- `0006_planning_center_integrations.sql` — org-scoped Planning Center OAuth storage (`organization_integrations`, `oauth_states`)
-- `0007_volunteer_planning_center_person_id.sql` — `volunteer_submissions.planning_center_person_id` (push/pull link to PC People)
-- `0008_password_reset_tokens.sql` — staff password reset tokens
-- `0009_admin_session_version.sql` — JWT session invalidation on password change
-- `0010_multi_admin_invites.sql` — `owner` role, `admin_invites` for team invites
-- `0011_submission_updated_by_planning_center_sync.sql` — `updated_by_admin_user_id`, PC sync metadata; drops `added_to_planning_center` status
-- `0012_submission_intake_updated_at.sql` — `intake_updated_at` for intake-only edits (Planning Center “edited since last sync” vs status/archive `updated_at`)
-- `0013_admin_notification_preferences.sql` — per-admin submission notification flags on `admin_users`
-- `0014_notify_admin_joined.sql` — `notify_admin_joined` (owners emailed when an invite is accepted)
 
 **Password reset email:** set `RESEND_API_KEY` (and optionally `RESEND_FROM`) on the Worker. Without a key, local dev logs the reset URL to the console.
 
 **Remote D1:** `d1:migrations:apply:remote` changes production data. Run it only when you intend to update the deployed database.
+
+### Fresh database
+
+Use this after pulling a migration squash or whenever local D1 is out of sync with the repo.
+
+**Local**
+
+1. Stop `npm run dev` if it is running.
+2. Delete the local D1 state (from `serveWell-server`):
+
+   ```sh
+   rm -rf .wrangler/state/v3/d1
+   ```
+
+   On Windows PowerShell: `Remove-Item -Recurse -Force .wrangler\state\v3\d1`
+
+3. Apply migrations:
+
+   ```sh
+   npm run d1:migrations:apply:local
+   ```
+
+**Remote (empty / demo-only environments)**
+
+Recreating the D1 database is simpler than clearing Wrangler’s migration history on an old DB:
+
+1. `npx wrangler d1 delete servewell-db` (confirm when prompted).
+2. `npx wrangler d1 create servewell-db` — copy the new `database_id` into `wrangler.toml` under `[[d1_databases]]`.
+3. `npm run d1:migrations:apply:remote`
+4. `npm run deploy`
+
+Re-connect Planning Center OAuth for any org after a remote reset (tokens lived in the old database).
 
 ## Demo seed (local testing)
 

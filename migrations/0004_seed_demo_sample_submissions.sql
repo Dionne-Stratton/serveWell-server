@@ -97,22 +97,23 @@ INSERT INTO volunteer_interests (
   form_id,
   submission_id,
   serving_area_id,
+  serving_area_name,
   uses_area_specific_frequency,
   experience_level,
   interest_notes
 )
-SELECT 1, 1, 1, sa.id, 0, 'experienced', 'Can serve slides most Sundays.'
+SELECT 1, 1, 1, sa.id, sa.name, 0, 'experienced', 'Can serve slides most Sundays.'
 FROM serving_areas sa
 WHERE sa.form_id = 1 AND sa.slug = 'slides'
 UNION ALL
-SELECT 1, 1, 2, sa.id, 0, 'some', 'Would love to help in kids ministry.'
+SELECT 1, 1, 2, sa.id, sa.name, 0, 'some', 'Would love to help in kids ministry.'
 FROM serving_areas sa
 WHERE sa.form_id = 1 AND sa.slug = 'kids-ministry'
 UNION ALL
-SELECT 1, 1, 3, sa.id, 0, 'none', NULL
+SELECT 1, 1, 3, sa.id, sa.name, 0, 'none', NULL
 FROM serving_areas sa
 WHERE sa.form_id = 1 AND sa.slug = 'greeting-hospitality'
 UNION ALL
-SELECT 1, 1, 3, sa.id, 0, 'not_sure', 'Happy to help with events when needed.'
+SELECT 1, 1, 3, sa.id, sa.name, 0, 'not_sure', 'Happy to help with events when needed.'
 FROM serving_areas sa
 WHERE sa.form_id = 1 AND sa.slug = 'events-special-events';

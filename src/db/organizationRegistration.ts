@@ -69,8 +69,9 @@ export async function createOrganizationWithAdmin(
         password_hash,
         display_name,
         role,
+        notify_admin_joined,
         is_active
-      ) VALUES (last_insert_rowid(), ?, ?, ?, 'owner', 1)
+      ) VALUES (last_insert_rowid(), ?, ?, ?, 'owner', 1, 1)
       `
     ).bind(input.adminEmail, passwordHash, input.adminDisplayName)
   ]);

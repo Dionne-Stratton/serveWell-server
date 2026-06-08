@@ -8,5 +8,5 @@ ENVIRONMENT = "production"
 [[d1_databases]]
 binding = "DB"
 database_name = "servewell-db"
-database_id = "df69f42c-0622-4017-8070-77f831d9cf39"
+database_id = "dc36bf23-7787-4424-a48f-48cbe0e5528d"
 migrations_dir = "migrations"
