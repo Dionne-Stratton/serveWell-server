@@ -76,6 +76,7 @@ Migrations live in `migrations/`:
 - `0005_volunteer_self_edit.sql` — `volunteer_self_updated_at` on submissions and `volunteer_submission_edit_tokens` for volunteer self-edit links
 - `0006_volunteer_updated_notify_default.sql` — enable `notify_volunteer_updated` for existing admins (new signups default on in schema)
 - `0007_volunteer_update_review.sql` — volunteer update review flag and reviewed metadata on submissions
+- `0008_purge_orphan_admin_users.sql` — remove admin rows left behind after organization deletes
 
 **Email (Resend):** set `RESEND_API_KEY` (and optionally `RESEND_FROM`) on the Worker. Without a key, local dev logs password-reset URLs to the console and skips other outbound mail.
 

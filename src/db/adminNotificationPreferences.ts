@@ -122,21 +122,23 @@ export async function listAdminsForSubmissionNotification(
   const query =
     excludeAdminUserId !== undefined
       ? `
-    SELECT id, email, display_name
-    FROM admin_users
-    WHERE organization_id = ?
-      AND is_active = 1
-      AND ${column} = 1
-      AND id != ?
-    ORDER BY id ASC
+    SELECT au.id, au.email, au.display_name
+    FROM admin_users au
+    INNER JOIN organizations o ON o.id = au.organization_id AND o.is_active = 1
+    WHERE au.organization_id = ?
+      AND au.is_active = 1
+      AND au.${column} = 1
+      AND au.id != ?
+    ORDER BY au.id ASC
     `
       : `
-    SELECT id, email, display_name
-    FROM admin_users
-    WHERE organization_id = ?
-      AND is_active = 1
-      AND ${column} = 1
-    ORDER BY id ASC
+    SELECT au.id, au.email, au.display_name
+    FROM admin_users au
+    INNER JOIN organizations o ON o.id = au.organization_id AND o.is_active = 1
+    WHERE au.organization_id = ?
+      AND au.is_active = 1
+      AND au.${column} = 1
+    ORDER BY au.id ASC
     `;
 
   const statement = env.DB.prepare(query);
@@ -187,14 +189,15 @@ export async function listOwnersForAdminJoinedNotification(
 ): Promise<AdminNotificationRecipient[]> {
   const result = await env.DB.prepare(
     `
-    SELECT id, email, display_name
-    FROM admin_users
-    WHERE organization_id = ?
-      AND is_active = 1
-      AND role = 'owner'
-      AND notify_admin_joined = 1
-      AND id != ?
-    ORDER BY id ASC
+    SELECT au.id, au.email, au.display_name
+    FROM admin_users au
+    INNER JOIN organizations o ON o.id = au.organization_id AND o.is_active = 1
+    WHERE au.organization_id = ?
+      AND au.is_active = 1
+      AND au.role = 'owner'
+      AND au.notify_admin_joined = 1
+      AND au.id != ?
+    ORDER BY au.id ASC
     `
   )
     .bind(organizationId, excludeAdminUserId)
