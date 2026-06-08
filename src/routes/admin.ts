@@ -321,7 +321,8 @@ async function me(request: Request, env: Env): Promise<Response> {
         notificationPreferences: notificationPreferences ?? {
           newSubmissions: true,
           readyToSchedule: false,
-          volunteerUpdated: false
+          volunteerUpdated: false,
+          adminJoined: auth.admin!.role === "owner"
         }
       }
     });
@@ -408,7 +409,11 @@ async function patchMe(request: Request, env: Env): Promise<Response> {
         return badRequest("notificationPreferences must be a JSON object.");
       }
 
-      const updateInput: { newSubmissions?: boolean; readyToSchedule?: boolean } = {};
+      const updateInput: {
+        newSubmissions?: boolean;
+        readyToSchedule?: boolean;
+        adminJoined?: boolean;
+      } = {};
 
       if (prefsBody.newSubmissions !== undefined) {
         if (typeof prefsBody.newSubmissions !== "boolean") {
@@ -426,9 +431,22 @@ async function patchMe(request: Request, env: Env): Promise<Response> {
         updateInput.readyToSchedule = prefsBody.readyToSchedule;
       }
 
+      if (prefsBody.adminJoined !== undefined) {
+        if (auth.admin!.role !== "owner") {
+          return badRequest("Only the organization owner can change admin joined notifications.");
+        }
+
+        if (typeof prefsBody.adminJoined !== "boolean") {
+          return badRequest("notificationPreferences.adminJoined must be a boolean.");
+        }
+
+        updateInput.adminJoined = prefsBody.adminJoined;
+      }
+
       if (
         updateInput.newSubmissions === undefined &&
-        updateInput.readyToSchedule === undefined
+        updateInput.readyToSchedule === undefined &&
+        updateInput.adminJoined === undefined
       ) {
         return badRequest("Provide at least one notification preference to update.");
       }
@@ -459,7 +477,8 @@ async function patchMe(request: Request, env: Env): Promise<Response> {
         notificationPreferences: notificationPreferences ?? {
           newSubmissions: true,
           readyToSchedule: false,
-          volunteerUpdated: false
+          volunteerUpdated: false,
+          adminJoined: admin.role === "owner"
         }
       }
     });
@@ -525,7 +544,8 @@ async function patchOrganization(request: Request, env: Env): Promise<Response> 
         notificationPreferences: notificationPreferences ?? {
           newSubmissions: true,
           readyToSchedule: false,
-          volunteerUpdated: false
+          volunteerUpdated: false,
+          adminJoined: auth.admin!.role === "owner"
         }
       }
     });

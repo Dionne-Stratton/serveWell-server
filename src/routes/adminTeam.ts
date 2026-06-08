@@ -84,13 +84,15 @@ async function getTeam(request: Request, env: Env): Promise<Response> {
           id: member.id,
           email: member.email,
           displayName: member.displayName,
-          role: member.role
+          role: member.role,
+          status: "active" as const
         })),
         pendingInvites: invites.map((invite) => ({
           id: invite.id,
           email: invite.email,
           expiresAt: invite.expiresAt,
-          createdAt: invite.createdAt
+          createdAt: invite.createdAt,
+          status: "pending" as const
         })),
         canManage: auth.admin!.role === "owner"
       }

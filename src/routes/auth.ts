@@ -1,4 +1,5 @@
 import { acceptAdminInvite, previewAdminInvite } from "../auth/adminInviteAccept";
+import { notifyOwnersOfAdminJoined } from "../notifications/adminJoinedNotifications";
 import { signAdminJwt } from "../auth/jwt";
 import { requestChurchSlugHintForEmail } from "../auth/churchSlugHint";
 import { completePasswordReset, requestPasswordResetForEmail } from "../auth/passwordReset";
@@ -21,7 +22,7 @@ const CHURCH_SLUG_HINT_ACK =
 export async function authRoutes(
   request: Request,
   env: Env,
-  _ctx: ExecutionContext
+  ctx: ExecutionContext
 ): Promise<Response> {
   const url = new URL(request.url);
 
@@ -80,7 +81,7 @@ export async function authRoutes(
     }
 
     if (request.method === "POST") {
-      return acceptInvite(request, env);
+      return acceptInvite(request, env, ctx);
     }
 
     return methodNotAllowed();
@@ -283,7 +284,11 @@ async function previewInvite(request: Request, env: Env): Promise<Response> {
   }
 }
 
-async function acceptInvite(request: Request, env: Env): Promise<Response> {
+async function acceptInvite(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext
+): Promise<Response> {
   let body: unknown;
 
   try {
@@ -313,19 +318,34 @@ async function acceptInvite(request: Request, env: Env): Promise<Response> {
   }
 
   try {
-    const admin = await acceptAdminInvite(env, token, newPassword);
+    const accepted = await acceptAdminInvite(env, token, newPassword);
 
-    if (!admin) {
+    if (!accepted) {
       return badRequest(
         "This invitation link is invalid or has expired.",
         "INVALID_INVITE_TOKEN"
       );
     }
 
+    const { admin, newlyJoined } = accepted;
+
     const organization = await findActiveOrganizationById(env, admin.organizationId);
 
     if (!organization) {
       return serverError("Organization is not available.");
+    }
+
+    if (newlyJoined) {
+      ctx.waitUntil(
+        notifyOwnersOfAdminJoined(env, {
+          organizationId: organization.id,
+          organizationSlug: organization.slug,
+          organizationName: organization.name,
+          joinedAdminUserId: admin.id,
+          joinedAdminDisplayName: admin.displayName,
+          joinedAdminEmail: admin.email
+        })
+      );
     }
 
     const jwt = await signAdminJwt(admin, env);

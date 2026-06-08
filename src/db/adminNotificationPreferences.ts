@@ -5,19 +5,23 @@ export interface AdminNotificationPreferences {
   readyToSchedule: boolean;
   /** Stored for future volunteer self-edit notifications; not sent yet. */
   volunteerUpdated: boolean;
+  /** Owner-only: email when an invited admin accepts and joins. */
+  adminJoined: boolean;
 }
 
 interface NotificationPrefRow {
   notify_new_submissions: number;
   notify_ready_to_schedule: number;
   notify_volunteer_updated: number;
+  notify_admin_joined: number;
 }
 
 function mapNotificationPreferences(row: NotificationPrefRow): AdminNotificationPreferences {
   return {
     newSubmissions: row.notify_new_submissions === 1,
     readyToSchedule: row.notify_ready_to_schedule === 1,
-    volunteerUpdated: row.notify_volunteer_updated === 1
+    volunteerUpdated: row.notify_volunteer_updated === 1,
+    adminJoined: row.notify_admin_joined === 1
   };
 }
 
@@ -28,7 +32,7 @@ export async function getAdminNotificationPreferences(
 ): Promise<AdminNotificationPreferences | null> {
   const row = await env.DB.prepare(
     `
-    SELECT notify_new_submissions, notify_ready_to_schedule, notify_volunteer_updated
+    SELECT notify_new_submissions, notify_ready_to_schedule, notify_volunteer_updated, notify_admin_joined
     FROM admin_users
     WHERE id = ? AND organization_id = ? AND is_active = 1
     LIMIT 1
@@ -47,6 +51,7 @@ export async function getAdminNotificationPreferences(
 export interface UpdateAdminNotificationPreferencesInput {
   newSubmissions?: boolean;
   readyToSchedule?: boolean;
+  adminJoined?: boolean;
 }
 
 export async function updateAdminNotificationPreferences(
@@ -67,6 +72,8 @@ export async function updateAdminNotificationPreferences(
     typeof input.readyToSchedule === "boolean"
       ? input.readyToSchedule
       : current.readyToSchedule;
+  const nextAdminJoined =
+    typeof input.adminJoined === "boolean" ? input.adminJoined : current.adminJoined;
 
   await env.DB.prepare(
     `
@@ -74,11 +81,18 @@ export async function updateAdminNotificationPreferences(
     SET
       notify_new_submissions = ?,
       notify_ready_to_schedule = ?,
+      notify_admin_joined = ?,
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ? AND organization_id = ? AND is_active = 1
     `
   )
-    .bind(nextNew ? 1 : 0, nextReady ? 1 : 0, adminUserId, organizationId)
+    .bind(
+      nextNew ? 1 : 0,
+      nextReady ? 1 : 0,
+      nextAdminJoined ? 1 : 0,
+      adminUserId,
+      organizationId
+    )
     .run();
 
   return getAdminNotificationPreferences(env, adminUserId, organizationId);
@@ -128,6 +142,33 @@ export async function listAdminsForSubmissionNotification(
       : await statement
           .bind(organizationId)
           .all<{ id: number; email: string; display_name: string }>();
+
+  return (result.results ?? []).map((row) => ({
+    id: row.id,
+    email: row.email,
+    displayName: row.display_name
+  }));
+}
+
+export async function listOwnersForAdminJoinedNotification(
+  env: Env,
+  organizationId: number,
+  excludeAdminUserId: number
+): Promise<AdminNotificationRecipient[]> {
+  const result = await env.DB.prepare(
+    `
+    SELECT id, email, display_name
+    FROM admin_users
+    WHERE organization_id = ?
+      AND is_active = 1
+      AND role = 'owner'
+      AND notify_admin_joined = 1
+      AND id != ?
+    ORDER BY id ASC
+    `
+  )
+    .bind(organizationId, excludeAdminUserId)
+    .all<{ id: number; email: string; display_name: string }>();
 
   return (result.results ?? []).map((row) => ({
     id: row.id,

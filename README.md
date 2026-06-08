@@ -81,6 +81,8 @@ Migrations live in `migrations/`:
 - `0010_multi_admin_invites.sql` — `owner` role, `admin_invites` for team invites
 - `0011_submission_updated_by_planning_center_sync.sql` — `updated_by_admin_user_id`, PC sync metadata; drops `added_to_planning_center` status
 - `0012_submission_intake_updated_at.sql` — `intake_updated_at` for intake-only edits (Planning Center “edited since last sync” vs status/archive `updated_at`)
+- `0013_admin_notification_preferences.sql` — per-admin submission notification flags on `admin_users`
+- `0014_notify_admin_joined.sql` — `notify_admin_joined` (owners emailed when an invite is accepted)
 
 **Password reset email:** set `RESEND_API_KEY` (and optionally `RESEND_FROM`) on the Worker. Without a key, local dev logs the reset URL to the console.
 

@@ -123,11 +123,16 @@ export async function previewAdminInvite(
   };
 }
 
+export interface AcceptAdminInviteResult {
+  admin: AdminUser;
+  newlyJoined: boolean;
+}
+
 export async function acceptAdminInvite(
   env: Env,
   plainToken: string,
   newPassword: string
-): Promise<AdminUser | null> {
+): Promise<AcceptAdminInviteResult | null> {
   const trimmed = plainToken.trim();
   if (!trimmed) {
     return null;
@@ -148,7 +153,7 @@ export async function acceptAdminInvite(
 
   if (existing) {
     await markAdminInviteAccepted(env, invite.id);
-    return existing;
+    return { admin: existing, newlyJoined: false };
   }
 
   const passwordHash = await hashPassword(newPassword);
@@ -162,5 +167,5 @@ export async function acceptAdminInvite(
 
   await markAdminInviteAccepted(env, invite.id);
 
-  return admin;
+  return { admin, newlyJoined: true };
 }
