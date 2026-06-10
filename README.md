@@ -78,6 +78,7 @@ Migrations live in `migrations/`:
 - `0007_volunteer_update_review.sql` — volunteer update review flag and reviewed metadata on submissions
 - `0008_purge_orphan_admin_users.sql` — remove admin rows left behind after organization deletes
 - `0009_planning_center_import.sql` — Planning Center import metadata on volunteer submissions
+- `0010_submission_blackout_dates.sql` — unavailable date ranges per submission
 
 **Email (Resend):** set `RESEND_API_KEY` (and optionally `RESEND_FROM`) on the Worker. Without a key, local dev logs password-reset URLs to the console and skips other outbound mail.
 

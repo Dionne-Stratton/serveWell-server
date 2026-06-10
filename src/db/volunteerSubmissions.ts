@@ -14,6 +14,12 @@ export interface RequirementConfirmationInput {
   confirmed: boolean;
 }
 
+export interface SubmissionBlackoutDateInput {
+  startDate: string;
+  endDate: string;
+  note: string | null;
+}
+
 export interface CreateVolunteerSubmissionInput {
   firstName: string;
   lastName: string;
@@ -27,6 +33,7 @@ export interface CreateVolunteerSubmissionInput {
   additionalNotes: string | null;
   interests: VolunteerInterestInput[];
   requirementConfirmations: RequirementConfirmationInput[];
+  blackoutDates: SubmissionBlackoutDateInput[];
 }
 
 export interface VolunteerSubmissionScope {
@@ -140,6 +147,9 @@ export async function replaceVolunteerSubmissionContent(
     env.DB.prepare(`DELETE FROM volunteer_availability WHERE submission_id = ?`).bind(submissionId),
     env.DB.prepare(`DELETE FROM volunteer_requirement_confirmations WHERE submission_id = ?`).bind(
       submissionId
+    ),
+    env.DB.prepare(`DELETE FROM submission_blackout_dates WHERE submission_id = ?`).bind(
+      submissionId
     )
   ]);
 
@@ -202,6 +212,9 @@ export async function replaceVolunteerSubmissionByVolunteer(
     env.DB.prepare(`DELETE FROM volunteer_interests WHERE submission_id = ?`).bind(submissionId),
     env.DB.prepare(`DELETE FROM volunteer_availability WHERE submission_id = ?`).bind(submissionId),
     env.DB.prepare(`DELETE FROM volunteer_requirement_confirmations WHERE submission_id = ?`).bind(
+      submissionId
+    ),
+    env.DB.prepare(`DELETE FROM submission_blackout_dates WHERE submission_id = ?`).bind(
       submissionId
     )
   ]);
@@ -289,6 +302,18 @@ async function insertVolunteerSubmissionChildren(
         confirmation.requirementId,
         confirmation.confirmed ? 1 : 0
       )
+    ),
+    ...input.blackoutDates.map((blackout) =>
+      env.DB.prepare(
+        `
+        INSERT INTO submission_blackout_dates (
+          submission_id,
+          start_date,
+          end_date,
+          note
+        ) VALUES (?, ?, ?, ?)
+        `
+      ).bind(submissionId, blackout.startDate, blackout.endDate, blackout.note)
     )
   ];
 

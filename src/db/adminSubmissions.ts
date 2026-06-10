@@ -105,6 +105,13 @@ export interface AdminSubmissionDetail {
     note: string;
     createdAt: string;
   }>;
+  blackoutDates: Array<{
+    id: number;
+    startDate: string;
+    endDate: string;
+    note: string | null;
+    createdAt: string;
+  }>;
 }
 
 export interface AdminSubmissionFilters {
@@ -438,10 +445,11 @@ export async function getAdminSubmissionDetail(
     return null;
   }
 
-  const [interests, confirmations, adminNotes] = await Promise.all([
+  const [interests, confirmations, adminNotes, blackoutDates] = await Promise.all([
     listSubmissionInterests(env, submissionId),
     listRequirementConfirmations(env, submissionId),
-    listAdminNotes(env, submissionId)
+    listAdminNotes(env, submissionId),
+    listSubmissionBlackoutDates(env, submissionId)
   ]);
 
   return {
@@ -504,8 +512,39 @@ export async function getAdminSubmissionDetail(
     },
     interests,
     requirementConfirmations: confirmations,
-    adminNotes
+    adminNotes,
+    blackoutDates
   };
+}
+
+async function listSubmissionBlackoutDates(
+  env: Env,
+  submissionId: number
+): Promise<AdminSubmissionDetail["blackoutDates"]> {
+  const result = await env.DB.prepare(
+    `
+    SELECT id, start_date, end_date, note, created_at
+    FROM submission_blackout_dates
+    WHERE submission_id = ?
+    ORDER BY start_date ASC, id ASC
+    `
+  )
+    .bind(submissionId)
+    .all<{
+      id: number;
+      start_date: string;
+      end_date: string;
+      note: string | null;
+      created_at: string;
+    }>();
+
+  return (result.results ?? []).map((row) => ({
+    id: row.id,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    note: row.note,
+    createdAt: row.created_at
+  }));
 }
 
 async function listSubmissionInterests(

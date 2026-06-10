@@ -1,3 +1,4 @@
+import { normalizeBlackoutDates } from "./blackoutDates";
 import {
   availabilityKeys,
   experienceLevels,
@@ -118,6 +119,12 @@ export async function validateVolunteerSubmission(
     return { error: servingAreaError };
   }
 
+  const blackoutDates = normalizeBlackoutDates(body.blackoutDates);
+
+  if (typeof blackoutDates === "string") {
+    return { error: blackoutDates };
+  }
+
   if (typeof options?.excludeSubmissionId === "number") {
     const taken = await isEmailUsedByOtherActiveSubmission(
       env,
@@ -147,7 +154,8 @@ export async function validateVolunteerSubmission(
       experienceNotes: normalizeOptionalString(body.experienceNotes),
       additionalNotes: normalizeOptionalString(body.additionalNotes),
       interests,
-      requirementConfirmations
+      requirementConfirmations,
+      blackoutDates
     }
   };
 }
