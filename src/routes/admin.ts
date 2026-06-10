@@ -984,6 +984,15 @@ async function putSubmission(
       return notFound();
     }
 
+    if (existing.submission.formId == null) {
+      return badRequest(
+        "Planning Center import records cannot be edited as volunteer form submissions.",
+        "IMPORT_NOT_EDITABLE"
+      );
+    }
+
+    const formId = existing.submission.formId;
+
     let body: unknown;
 
     try {
@@ -994,7 +1003,7 @@ async function putSubmission(
 
     const validation = await validateVolunteerSubmission(env, body, {
       organizationId: auth.admin!.organizationId,
-      formId: existing.submission.formId
+      formId
     });
 
     if (validation.error || !validation.input) {
@@ -1005,7 +1014,7 @@ async function putSubmission(
       env,
       submissionId,
       auth.admin!.organizationId,
-      existing.submission.formId,
+      formId,
       validation.input,
       auth.admin!.id
     );
@@ -1316,9 +1325,13 @@ function parseSubmissionFilters(searchParams: URLSearchParams) {
   const servingAreaId = normalizeOptionalPositiveInteger(searchParams.get("servingAreaId"));
   const formSectionId = normalizeOptionalPositiveInteger(searchParams.get("formSectionId"));
   const search = normalizeOptionalString(searchParams.get("search"));
+  const planningCenterImportTabName = normalizeOptionalString(
+    searchParams.get("planningCenterImportTabName")
+  );
 
   return {
     formId,
+    planningCenterImportTabName,
     status,
     archived,
     servingAreaId,

@@ -26,6 +26,7 @@ import {
   encryptPlanningCenterSecret
 } from "../integrations/planningCenterCrypto";
 import { json, methodNotAllowed, notFound, serverError } from "../http/responses";
+import { tryPlanningCenterImportRoute } from "./planningCenterImport";
 import type { Env } from "../types";
 
 export async function planningCenterRoutes(
@@ -34,6 +35,12 @@ export async function planningCenterRoutes(
   _ctx: ExecutionContext
 ): Promise<Response> {
   const url = new URL(request.url);
+
+  const importRouteResponse = await tryPlanningCenterImportRoute(request, env, url.pathname);
+
+  if (importRouteResponse) {
+    return importRouteResponse;
+  }
 
   if (url.pathname === "/api/admin/integrations/planning-center") {
     if (request.method !== "GET") {

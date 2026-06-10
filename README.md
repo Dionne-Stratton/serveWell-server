@@ -77,6 +77,7 @@ Migrations live in `migrations/`:
 - `0006_volunteer_updated_notify_default.sql` — enable `notify_volunteer_updated` for existing admins (new signups default on in schema)
 - `0007_volunteer_update_review.sql` — volunteer update review flag and reviewed metadata on submissions
 - `0008_purge_orphan_admin_users.sql` — remove admin rows left behind after organization deletes
+- `0009_planning_center_import.sql` — Planning Center import metadata on volunteer submissions
 
 **Email (Resend):** set `RESEND_API_KEY` (and optionally `RESEND_FROM`) on the Worker. Without a key, local dev logs password-reset URLs to the console and skips other outbound mail.
 
@@ -200,8 +201,13 @@ OAuth callback is a browser redirect (no JWT). Admin routes require `Authorizati
 | `POST` | `/api/admin/integrations/planning-center/connect` | **Owner only** — returns `authorizationUrl` to start OAuth |
 | `POST` | `/api/admin/integrations/planning-center/disconnect` | **Owner only** — revokes refresh token when possible, clears integration |
 | `GET` | `/api/planning-center/callback` | OAuth redirect target; redirects to `FRONTEND_ORIGIN` with query params |
+| `GET` | `/api/admin/integrations/planning-center/people?search=` | Search People for import v1 |
+| `GET` | `/api/admin/integrations/planning-center/tabs` | List People tabs for import v1 |
+| `POST` | `/api/admin/integrations/planning-center/import/preview` | Preview contact + optional custom tab fields |
+| `GET` | `/api/admin/integrations/planning-center/import-sources` | Distinct PC tab names used for imports (Volunteers filter) |
+| `POST` | `/api/admin/integrations/planning-center/import` | Create one import record from a PC person + tab (`form_id` null; `409` if same person+tab) |
 
-Requires migration `0006` and Planning Center app credentials in Worker secrets / `.dev.vars`.
+Requires migration `0006` and Planning Center app credentials in Worker secrets / `.dev.vars`. Import metadata columns require migration `0009`.
 
 On successful OAuth connect, the server ensures one People tab per volunteer form, named **SW: {form name}** (for example **SW: Volunteering**), each with the same custom fields (Overall Frequency, Frequency Limits, Availability, Special Events, Requirements, Serving areas, Last synced). Tab and field IDs are stored in `organization_integrations.settings_json` under `formTabs` (keyed by form id). New forms created while connected get a matching tab automatically. If setup fails, connect still completes and the admin redirect includes `fieldsSetup=error`.
 

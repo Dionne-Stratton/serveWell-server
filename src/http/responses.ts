@@ -45,6 +45,20 @@ export function forbidden(message = "Forbidden."): Response {
   );
 }
 
+export function conflict(
+  message: string,
+  code = "CONFLICT",
+  extra?: Record<string, unknown>
+): Response {
+  return json(
+    {
+      success: false,
+      error: { message, code, ...extra }
+    },
+    { status: 409 }
+  );
+}
+
 export function serverError(message = "Something went wrong."): Response {
   return json(
     { success: false, error: { message, code: "INTERNAL_SERVER_ERROR" } },

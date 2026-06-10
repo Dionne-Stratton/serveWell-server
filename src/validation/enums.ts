@@ -9,7 +9,8 @@ export const frequencyOptions = [
   "twice_month",
   "once_month",
   "occasionally",
-  "flexible"
+  "flexible",
+  "not_sure"
 ] as const;
 
 export const availabilityKeys = [

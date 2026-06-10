@@ -18,7 +18,7 @@ export interface AdminSubmissionStaffNote {
 
 export interface AdminSubmissionListItem {
   id: number;
-  formId: number;
+  formId: number | null;
   formName: string;
   firstName: string;
   lastName: string;
@@ -36,6 +36,7 @@ export interface AdminSubmissionListItem {
   createdAt: string;
   volunteerSelfUpdatedAt: string | null;
   volunteerUpdateReviewNeeded: boolean;
+  planningCenterImportedAt: string | null;
   staffNotes: AdminSubmissionStaffNote[];
 }
 
@@ -43,7 +44,7 @@ export interface AdminSubmissionDetail {
   submission: {
     id: number;
     organizationId: number;
-    formId: number;
+    formId: number | null;
     formName: string;
     firstName: string;
     lastName: string;
@@ -60,6 +61,15 @@ export interface AdminSubmissionDetail {
     planningCenterPersonId: string | null;
     planningCenterSyncedAt: string | null;
     planningCenterSyncedBy: AdminActorSummary | null;
+    planningCenterImportedAt: string | null;
+    planningCenterImportedBy: AdminActorSummary | null;
+    planningCenterImportTabId: string | null;
+    planningCenterImportTabName: string | null;
+    planningCenterImportCustomFields: Array<{
+      fieldDefinitionId: string;
+      name: string;
+      value: string;
+    }>;
     editedSinceLastPlanningCenterSync: boolean;
     createdAt: string;
     updatedAt: string;
@@ -100,6 +110,7 @@ export interface AdminSubmissionDetail {
 export interface AdminSubmissionFilters {
   organizationId?: number;
   formId?: number;
+  planningCenterImportTabName?: string;
   status?: string;
   archived?: boolean;
   servingAreaId?: number;
@@ -135,7 +146,7 @@ export interface AdminSubmissionMutationResult {
 
 interface AdminSubmissionRow {
   id: number;
-  form_id: number;
+  form_id: number | null;
   form_name: string;
   first_name: string;
   last_name: string;
@@ -153,12 +164,13 @@ interface AdminSubmissionRow {
   created_at: string;
   volunteer_self_updated_at: string | null;
   volunteer_update_review_needed: number;
+  planning_center_imported_at: string | null;
 }
 
 interface AdminSubmissionDetailRow {
   id: number;
   organization_id: number;
-  form_id: number;
+  form_id: number | null;
   form_name: string;
   first_name: string;
   last_name: string;
@@ -189,6 +201,13 @@ interface AdminSubmissionDetailRow {
   volunteer_update_reviewed_by_display_name: string | null;
   volunteer_update_reviewed_by_email: string | null;
   availability: string | null;
+  planning_center_imported_at: string | null;
+  planning_center_imported_by_admin_user_id: number | null;
+  pc_imported_by_display_name: string | null;
+  pc_imported_by_email: string | null;
+  planning_center_import_tab_id: string | null;
+  planning_center_import_tab_name: string | null;
+  planning_center_import_custom_data_json: string | null;
 }
 
 interface AdminSubmissionInterestRow {
@@ -235,6 +254,11 @@ export async function listAdminSubmissions(
   if (filters.formId) {
     conditions.push("vs.form_id = ?");
     bindings.push(filters.formId);
+  }
+
+  if (filters.planningCenterImportTabName) {
+    conditions.push("vs.planning_center_import_tab_name = ?");
+    bindings.push(filters.planningCenterImportTabName);
   }
 
   if (filters.status) {
@@ -289,7 +313,7 @@ export async function listAdminSubmissions(
     SELECT
       vs.id,
       vs.form_id,
-      vf.name AS form_name,
+      COALESCE(vf.name, vs.planning_center_import_tab_name, 'Unknown source') AS form_name,
       vs.first_name,
       vs.last_name,
       vs.email,
@@ -302,12 +326,13 @@ export async function listAdminSubmissions(
       vs.created_at,
       vs.volunteer_self_updated_at,
       vs.volunteer_update_review_needed,
+      vs.planning_center_imported_at,
       GROUP_CONCAT(DISTINCT COALESCE(sa.name, vi.serving_area_name)) AS serving_areas,
       GROUP_CONCAT(DISTINCT va.availability_key) AS availability,
       MAX(sa.requires_background_check) AS requires_background_check,
       MAX(sa.requires_training) AS requires_training
     FROM volunteer_submissions vs
-    INNER JOIN volunteer_forms vf
+    LEFT JOIN volunteer_forms vf
       ON vf.id = vs.form_id
     LEFT JOIN volunteer_interests vi
       ON vi.submission_id = vs.id
@@ -347,7 +372,7 @@ export async function getAdminSubmissionDetail(
       vs.id,
       vs.organization_id,
       vs.form_id,
-      vf.name AS form_name,
+      COALESCE(vf.name, vs.planning_center_import_tab_name, 'Unknown source') AS form_name,
       vs.first_name,
       vs.last_name,
       vs.email,
@@ -376,9 +401,16 @@ export async function getAdminSubmissionDetail(
       vs.volunteer_update_reviewed_by_admin_user_id,
       review_admin.display_name AS volunteer_update_reviewed_by_display_name,
       review_admin.email AS volunteer_update_reviewed_by_email,
+      vs.planning_center_imported_at,
+      vs.planning_center_imported_by_admin_user_id,
+      pc_import_admin.display_name AS pc_imported_by_display_name,
+      pc_import_admin.email AS pc_imported_by_email,
+      vs.planning_center_import_tab_id,
+      vs.planning_center_import_tab_name,
+      vs.planning_center_import_custom_data_json,
       GROUP_CONCAT(DISTINCT va.availability_key) AS availability
     FROM volunteer_submissions vs
-    INNER JOIN volunteer_forms vf
+    LEFT JOIN volunteer_forms vf
       ON vf.id = vs.form_id
     LEFT JOIN admin_users updated_admin
       ON updated_admin.id = vs.updated_by_admin_user_id
@@ -386,6 +418,8 @@ export async function getAdminSubmissionDetail(
       ON review_admin.id = vs.volunteer_update_reviewed_by_admin_user_id
     LEFT JOIN admin_users pc_sync_admin
       ON pc_sync_admin.id = vs.planning_center_synced_by_admin_user_id
+    LEFT JOIN admin_users pc_import_admin
+      ON pc_import_admin.id = vs.planning_center_imported_by_admin_user_id
     LEFT JOIN volunteer_availability va
       ON va.submission_id = vs.id
     WHERE vs.id = ?${organizationClause}
@@ -434,6 +468,17 @@ export async function getAdminSubmissionDetail(
         submission.planning_center_synced_by_admin_user_id,
         submission.pc_synced_by_display_name,
         submission.pc_synced_by_email
+      ),
+      planningCenterImportedAt: submission.planning_center_imported_at ?? null,
+      planningCenterImportedBy: mapAdminActorFromJoin(
+        submission.planning_center_imported_by_admin_user_id,
+        submission.pc_imported_by_display_name,
+        submission.pc_imported_by_email
+      ),
+      planningCenterImportTabId: submission.planning_center_import_tab_id ?? null,
+      planningCenterImportTabName: submission.planning_center_import_tab_name ?? null,
+      planningCenterImportCustomFields: parsePlanningCenterImportCustomFields(
+        submission.planning_center_import_custom_data_json
       ),
       createdAt: submission.created_at,
       updatedAt: submission.updated_at,
@@ -890,8 +935,47 @@ function mapAdminSubmissionListItem(
     createdAt: row.created_at,
     volunteerSelfUpdatedAt: row.volunteer_self_updated_at ?? null,
     volunteerUpdateReviewNeeded: Boolean(row.volunteer_update_review_needed),
+    planningCenterImportedAt: row.planning_center_imported_at ?? null,
     staffNotes,
   };
+}
+
+function parsePlanningCenterImportCustomFields(
+  json: string | null
+): AdminSubmissionDetail["submission"]["planningCenterImportCustomFields"] {
+  if (!json?.trim()) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(json) as unknown;
+
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed
+      .map((entry) => {
+        if (!entry || typeof entry !== "object") {
+          return null;
+        }
+
+        const record = entry as Record<string, unknown>;
+        const fieldDefinitionId =
+          typeof record.fieldDefinitionId === "string" ? record.fieldDefinitionId : "";
+        const name = typeof record.name === "string" ? record.name : "";
+        const value = typeof record.value === "string" ? record.value : "";
+
+        if (!fieldDefinitionId || !name) {
+          return null;
+        }
+
+        return { fieldDefinitionId, name, value };
+      })
+      .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+  } catch {
+    return [];
+  }
 }
 
 export async function markVolunteerUpdateReviewed(

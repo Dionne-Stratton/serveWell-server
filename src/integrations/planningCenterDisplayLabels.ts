@@ -4,7 +4,8 @@ const frequencyLabels: Record<string, string> = {
   twice_month: "Twice per month",
   once_month: "Once per month",
   occasionally: "Occasionally",
-  flexible: "Flexible / as needed"
+  flexible: "Flexible / as needed",
+  not_sure: "Not sure"
 };
 
 const availabilityLabels: Record<string, string> = {
