@@ -1,3 +1,7 @@
+import {
+  parseVolunteerIntakeSnapshot,
+  type VolunteerIntakeSnapshot
+} from "./volunteerIntakeSnapshot";
 import type { Env } from "../types";
 import {
   normalizeSubmissionStatus,
@@ -112,6 +116,7 @@ export interface AdminSubmissionDetail {
     note: string | null;
     createdAt: string;
   }>;
+  volunteerUpdatePendingSnapshot: VolunteerIntakeSnapshot | null;
 }
 
 export interface AdminSubmissionFilters {
@@ -207,6 +212,7 @@ interface AdminSubmissionDetailRow {
   volunteer_update_reviewed_by_admin_user_id: number | null;
   volunteer_update_reviewed_by_display_name: string | null;
   volunteer_update_reviewed_by_email: string | null;
+  volunteer_update_pending_snapshot_json: string | null;
   availability: string | null;
   planning_center_imported_at: string | null;
   planning_center_imported_by_admin_user_id: number | null;
@@ -406,6 +412,7 @@ export async function getAdminSubmissionDetail(
       vs.volunteer_update_review_needed,
       vs.volunteer_update_reviewed_at,
       vs.volunteer_update_reviewed_by_admin_user_id,
+      vs.volunteer_update_pending_snapshot_json,
       review_admin.display_name AS volunteer_update_reviewed_by_display_name,
       review_admin.email AS volunteer_update_reviewed_by_email,
       vs.planning_center_imported_at,
@@ -513,7 +520,12 @@ export async function getAdminSubmissionDetail(
     interests,
     requirementConfirmations: confirmations,
     adminNotes,
-    blackoutDates
+    blackoutDates,
+    volunteerUpdatePendingSnapshot:
+      submission.volunteer_update_review_needed &&
+      submission.volunteer_update_pending_snapshot_json
+        ? parseVolunteerIntakeSnapshot(submission.volunteer_update_pending_snapshot_json)
+        : null
   };
 }
 
@@ -1030,6 +1042,7 @@ export async function markVolunteerUpdateReviewed(
       volunteer_update_review_needed = 0,
       volunteer_update_reviewed_at = CURRENT_TIMESTAMP,
       volunteer_update_reviewed_by_admin_user_id = ?,
+      volunteer_update_pending_snapshot_json = NULL,
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
       AND organization_id = ?

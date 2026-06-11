@@ -1,0 +1,1 @@
+ALTER TABLE volunteer_submissions ADD COLUMN volunteer_update_pending_snapshot_json TEXT;

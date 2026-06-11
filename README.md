@@ -79,6 +79,7 @@ Migrations live in `migrations/`:
 - `0008_purge_orphan_admin_users.sql` — remove admin rows left behind after organization deletes
 - `0009_planning_center_import.sql` — Planning Center import metadata on volunteer submissions
 - `0010_submission_blackout_dates.sql` — unavailable date ranges per submission
+- `0011_volunteer_update_pending_snapshot.sql` — JSON snapshot of intake before volunteer self-edit (for admin change review)
 
 **Email (Resend):** set `RESEND_API_KEY` (and optionally `RESEND_FROM`) on the Worker. Without a key, local dev logs password-reset URLs to the console and skips other outbound mail.
 
@@ -149,7 +150,14 @@ All public volunteer data and submissions are scoped by **organization slug** (a
 | `POST` | `/api/organizations/:organizationSlug/forms/:formSlug/submissions` | Create submission for that form |
 | `POST` | `/api/organizations/:organizationSlug/volunteer-submissions` | Create submission on org default form |
 
-Public form payloads include **sections** (when present), serving areas, and requirements. Submissions require **email**; **phone** is optional unless preferred contact is text or phone (validated server-side).
+Public form payloads include **sections** (when present), serving areas, and requirements. Submissions require **email**; **phone** is optional unless preferred contact is text or phone (validated server-side). Optional **`blackoutDates`**: `{ startDate, endDate?, note? }[]` per submission (migration `0010`).
+
+| Method | Path | Notes |
+|--------|------|--------|
+| `POST` | `/api/organizations/:organizationSlug/forms/:formSlug/submission-update-request` | Email a volunteer self-edit link (same form) |
+| `POST` | `/api/organizations/:organizationSlug/volunteer-submission-update-request` | Same, for org default form |
+| `GET` | `/api/public/volunteer-submission-edit?token=` | Load submission + form for self-edit |
+| `PUT` | `/api/public/volunteer-submission-edit` | Save self-edit (body: `token` + intake fields, including `blackoutDates`) |
 
 Legacy global routes (`GET /api/serving-areas`, `POST /api/volunteer-submissions`) are **removed**. Use the organization routes above (e.g. slug `demo`).
 
@@ -167,10 +175,10 @@ Legacy global routes (`GET /api/serving-areas`, `POST /api/volunteer-submissions
 | `POST` | `/api/admin/team/invites` | Owner only; invite admin by email (7-day token, Resend) |
 | `DELETE` | `/api/admin/team/invites/:inviteId` | Owner only; revoke pending invite |
 | `DELETE` | `/api/admin/team/members/:adminUserId` | Owner only; deactivate admin (not owner, not self) |
-| `GET` | `/api/admin/submissions` | List for authenticated admin’s org; query: `formId`, `status`, `archived`, `servingAreaId`, `search` |
-| `GET` | `/api/admin/submissions/:id` | Detail (`editedSinceLastPlanningCenterSync`, PC sync fields, `updatedBy`); must belong to admin’s org |
+| `GET` | `/api/admin/submissions` | List for authenticated admin’s org; query: `formId`, `status`, `archived`, `servingAreaId`, `search`, `planningCenterImportTabName` |
+| `GET` | `/api/admin/submissions/:id` | Detail (`blackoutDates`, `editedSinceLastPlanningCenterSync`, PC sync/import fields, `updatedBy`); must belong to admin’s org |
 | `PATCH` | `/api/admin/submissions/:id` | Update workflow fields (`status`, `isArchived`); updates `updated_at` / `updated_by`, not `intake_updated_at` |
-| `PUT` | `/api/admin/submissions/:id` | Replace volunteer intake fields (same body as public submit; sets `intake_updated_at`; not allowed for org `demo`) |
+| `PUT` | `/api/admin/submissions/:id` | Replace volunteer intake (same body as public submit, including `blackoutDates`; sets `intake_updated_at`; blocks `demo` and PC import rows) |
 | `DELETE` | `/api/admin/submissions/:id` | Permanent delete in ServeWell only (not Planning Center) |
 | `POST` | `/api/admin/submissions/:id/planning-center` | Push/sync to PC People; records `planning_center_synced_at` / `by` (does not change workflow status on re-sync) |
 | `POST` | `/api/admin/submissions/:id/notes` | Add staff-only note to a submission |
@@ -208,7 +216,7 @@ OAuth callback is a browser redirect (no JWT). Admin routes require `Authorizati
 | `GET` | `/api/admin/integrations/planning-center/import-sources` | Distinct PC tab names used for imports (Volunteers filter) |
 | `POST` | `/api/admin/integrations/planning-center/import` | Create one import record from a PC person + tab (`form_id` null; `409` if same person+tab) |
 
-Requires migration `0006` and Planning Center app credentials in Worker secrets / `.dev.vars`. Import metadata columns require migration `0009`.
+Requires migration `0006` and Planning Center app credentials in Worker secrets / `.dev.vars`. Import metadata columns require migration `0009`. Blackout dates require migration `0010`.
 
 On successful OAuth connect, the server ensures one People tab per volunteer form, named **SW: {form name}** (for example **SW: Volunteering**), each with the same custom fields (Overall Frequency, Frequency Limits, Availability, Special Events, Requirements, Serving areas, Last synced). Tab and field IDs are stored in `organization_integrations.settings_json` under `formTabs` (keyed by form id). New forms created while connected get a matching tab automatically. If setup fails, connect still completes and the admin redirect includes `fieldsSetup=error`.
 

@@ -1,3 +1,4 @@
+import { captureVolunteerIntakeSnapshotJson } from "./volunteerIntakeSnapshot";
 import type { Env } from "../types";
 
 export interface VolunteerInterestInput {
@@ -165,6 +166,8 @@ export async function replaceVolunteerSubmissionByVolunteer(
   formId: number,
   input: CreateVolunteerSubmissionInput
 ): Promise<boolean> {
+  const pendingSnapshotJson = await captureVolunteerIntakeSnapshotJson(env, submissionId);
+
   const update = await env.DB.prepare(
     `
     UPDATE volunteer_submissions
@@ -182,6 +185,7 @@ export async function replaceVolunteerSubmissionByVolunteer(
       volunteer_update_review_needed = 1,
       volunteer_update_reviewed_at = NULL,
       volunteer_update_reviewed_by_admin_user_id = NULL,
+      volunteer_update_pending_snapshot_json = ?,
       updated_at = CURRENT_TIMESTAMP,
       intake_updated_at = CURRENT_TIMESTAMP,
       updated_by_admin_user_id = NULL
@@ -198,6 +202,7 @@ export async function replaceVolunteerSubmissionByVolunteer(
       input.openToSpecialEvents ? 1 : 0,
       input.experienceNotes,
       input.additionalNotes,
+      pendingSnapshotJson,
       submissionId,
       organizationId,
       formId
