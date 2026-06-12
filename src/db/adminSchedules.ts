@@ -1,5 +1,9 @@
 import type { Env } from "../types";
-import type { CreateScheduleInput } from "../validation/schedules";
+import type {
+  CreateScheduleInput,
+  CreateScheduleServingAreaInput,
+  UpdateScheduleRhythmInput
+} from "../validation/schedules";
 import { servingAreaKey } from "../validation/schedules";
 
 export interface AdminScheduleListItem {
@@ -454,4 +458,303 @@ async function listScheduleRhythmsWithRequirements(env: Env, scheduleId: number)
     startTime: row.start_time,
     requirements: requirementsByRhythm.get(row.id) ?? []
   }));
+}
+
+export async function updateAdminScheduleName(
+  env: Env,
+  organizationId: number,
+  scheduleId: number,
+  name: string
+): Promise<AdminScheduleDetail | null> {
+  const result = await env.DB.prepare(
+    `
+    UPDATE schedules
+    SET name = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND organization_id = ?
+    `
+  )
+    .bind(name, scheduleId, organizationId)
+    .run();
+
+  if (!result.meta.changes) {
+    return null;
+  }
+
+  return getAdminScheduleDetail(env, organizationId, scheduleId);
+}
+
+export type ReplaceScheduleServingAreasResult =
+  | { status: "ok"; detail: AdminScheduleDetail }
+  | { status: "not_found" }
+  | { status: "in_use"; displayNames: string[] }
+  | { status: "invalid_areas" };
+
+export async function replaceAdminScheduleServingAreas(
+  env: Env,
+  organizationId: number,
+  scheduleId: number,
+  servingAreas: CreateScheduleServingAreaInput[]
+): Promise<ReplaceScheduleServingAreasResult> {
+  const existing = await getAdminScheduleDetail(env, organizationId, scheduleId);
+
+  if (!existing) {
+    return { status: "not_found" };
+  }
+
+  const linkedIds = servingAreas
+    .map((row) => row.servingAreaId)
+    .filter((id): id is number => id !== null);
+
+  const areaMeta = new Map<number, { name: string; formId: number }>();
+
+  if (linkedIds.length > 0) {
+    const placeholders = linkedIds.map(() => "?").join(", ");
+    const areasResult = await env.DB.prepare(
+      `
+      SELECT id, form_id, name
+      FROM serving_areas
+      WHERE organization_id = ?
+        AND id IN (${placeholders})
+        AND is_active = 1
+      `
+    )
+      .bind(organizationId, ...linkedIds)
+      .all<{ id: number; form_id: number; name: string }>();
+
+    for (const row of areasResult.results ?? []) {
+      areaMeta.set(row.id, { name: row.name, formId: row.form_id });
+    }
+
+    for (const id of linkedIds) {
+      if (!areaMeta.has(id)) {
+        return { status: "invalid_areas" };
+      }
+    }
+  }
+
+  const currentByKey = new Map<string, { id: number; displayName: string }>();
+
+  for (const row of existing.servingAreas) {
+    const key = servingAreaKey(row.servingAreaId, row.customName);
+
+    if (key) {
+      currentByKey.set(key, { id: row.id, displayName: row.displayName });
+    }
+  }
+
+  const newKeys = new Set<string>();
+
+  for (const row of servingAreas) {
+    const key = servingAreaKey(row.servingAreaId, row.customName);
+
+    if (key) {
+      newKeys.add(key);
+    }
+  }
+
+  const idsToRemove: number[] = [];
+  const inUseNames: string[] = [];
+
+  for (const [key, meta] of currentByKey) {
+    if (!newKeys.has(key)) {
+      idsToRemove.push(meta.id);
+    }
+  }
+
+  if (idsToRemove.length > 0) {
+    const placeholders = idsToRemove.map(() => "?").join(", ");
+    const usageResult = await env.DB.prepare(
+      `
+      SELECT DISTINCT schedule_serving_area_id
+      FROM schedule_rhythm_requirements
+      WHERE schedule_serving_area_id IN (${placeholders})
+      `
+    )
+      .bind(...idsToRemove)
+      .all<{ schedule_serving_area_id: number }>();
+
+    const inUseIds = new Set(
+      (usageResult.results ?? []).map((row) => row.schedule_serving_area_id)
+    );
+
+    for (const id of idsToRemove) {
+      if (inUseIds.has(id)) {
+        const match = existing.servingAreas.find((row) => row.id === id);
+        inUseNames.push(match?.displayName ?? "Serving area");
+      }
+    }
+
+    if (inUseNames.length > 0) {
+      return { status: "in_use", displayNames: inUseNames };
+    }
+  }
+
+  for (const id of idsToRemove) {
+    await env.DB.prepare(
+      `
+      DELETE FROM schedule_serving_areas
+      WHERE id = ? AND schedule_id = ? AND organization_id = ?
+      `
+    )
+      .bind(id, scheduleId, organizationId)
+      .run();
+  }
+
+  for (const row of servingAreas) {
+    const key = servingAreaKey(row.servingAreaId, row.customName);
+
+    if (!key || currentByKey.has(key)) {
+      continue;
+    }
+
+    const meta = row.servingAreaId ? areaMeta.get(row.servingAreaId) : null;
+    const displayName = meta?.name ?? row.customName ?? "";
+
+    await env.DB.prepare(
+      `
+      INSERT INTO schedule_serving_areas (
+        schedule_id,
+        organization_id,
+        serving_area_id,
+        form_id,
+        custom_name,
+        display_name
+      )
+      VALUES (?, ?, ?, ?, ?, ?)
+      `
+    )
+      .bind(
+        scheduleId,
+        organizationId,
+        row.servingAreaId,
+        meta?.formId ?? null,
+        row.customName,
+        displayName
+      )
+      .run();
+  }
+
+  await env.DB.prepare(
+    `
+    UPDATE schedules
+    SET updated_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND organization_id = ?
+    `
+  )
+    .bind(scheduleId, organizationId)
+    .run();
+
+  const detail = await getAdminScheduleDetail(env, organizationId, scheduleId);
+
+  return detail ? { status: "ok", detail } : { status: "not_found" };
+}
+
+export async function replaceAdminScheduleRhythms(
+  env: Env,
+  organizationId: number,
+  scheduleId: number,
+  rhythms: UpdateScheduleRhythmInput[]
+): Promise<AdminScheduleDetail | null> {
+  const schedule = await env.DB.prepare(
+    `
+    SELECT id FROM schedules WHERE id = ? AND organization_id = ? LIMIT 1
+    `
+  )
+    .bind(scheduleId, organizationId)
+    .first<{ id: number }>();
+
+  if (!schedule) {
+    return null;
+  }
+
+  await env.DB.prepare(
+    `
+    DELETE FROM schedule_rhythms
+    WHERE schedule_id = ? AND organization_id = ?
+    `
+  )
+    .bind(scheduleId, organizationId)
+    .run();
+
+  for (let rhythmIndex = 0; rhythmIndex < rhythms.length; rhythmIndex += 1) {
+    const rhythm = rhythms[rhythmIndex];
+    const rhythmInsert = await env.DB.prepare(
+      `
+      INSERT INTO schedule_rhythms (
+        schedule_id,
+        organization_id,
+        name,
+        day_of_week,
+        start_time,
+        sort_order
+      )
+      VALUES (?, ?, ?, ?, ?, ?)
+      `
+    )
+      .bind(
+        scheduleId,
+        organizationId,
+        rhythm.name,
+        rhythm.dayOfWeek,
+        rhythm.startTime,
+        rhythmIndex
+      )
+      .run();
+
+    const rhythmId = rhythmInsert.meta.last_row_id;
+
+    if (!rhythmId) {
+      continue;
+    }
+
+    for (const requirement of rhythm.requirements) {
+      await env.DB.prepare(
+        `
+        INSERT INTO schedule_rhythm_requirements (
+          rhythm_id,
+          schedule_serving_area_id,
+          organization_id,
+          needed_count
+        )
+        VALUES (?, ?, ?, ?)
+        `
+      )
+        .bind(
+          rhythmId,
+          requirement.scheduleServingAreaId,
+          organizationId,
+          requirement.neededCount
+        )
+        .run();
+    }
+  }
+
+  await env.DB.prepare(
+    `
+    UPDATE schedules
+    SET updated_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND organization_id = ?
+    `
+  )
+    .bind(scheduleId, organizationId)
+    .run();
+
+  return getAdminScheduleDetail(env, organizationId, scheduleId);
+}
+
+export async function deleteAdminSchedule(
+  env: Env,
+  organizationId: number,
+  scheduleId: number
+): Promise<boolean> {
+  const result = await env.DB.prepare(
+    `
+    DELETE FROM schedules
+    WHERE id = ? AND organization_id = ?
+    `
+  )
+    .bind(scheduleId, organizationId)
+    .run();
+
+  return Boolean(result.meta.changes);
 }

@@ -75,6 +75,156 @@ export interface CreateScheduleInput {
   rhythms: CreateScheduleRhythmInput[];
 }
 
+export interface UpdateScheduleRhythmRequirementInput {
+  scheduleServingAreaId: number;
+  neededCount: number;
+}
+
+export interface UpdateScheduleRhythmInput {
+  name: string;
+  dayOfWeek: DayOfWeek;
+  startTime: string;
+  requirements: UpdateScheduleRhythmRequirementInput[];
+}
+
+export function validateScheduleNamePatch(
+  body: unknown
+): { name?: string; error?: string } {
+  if (!isRecord(body)) {
+    return { error: "Request body must be a JSON object." };
+  }
+
+  const name = normalizeRequiredString(body.name);
+
+  if (!name) {
+    return { error: "Schedule name is required." };
+  }
+
+  return { name };
+}
+
+export function validateScheduleServingAreasUpdate(
+  body: unknown
+): { servingAreas?: CreateScheduleServingAreaInput[]; error?: string } {
+  if (!isRecord(body)) {
+    return { error: "Request body must be a JSON object." };
+  }
+
+  const servingAreas = normalizeServingAreas(body.servingAreas);
+
+  if (typeof servingAreas === "string") {
+    return { error: servingAreas };
+  }
+
+  if (servingAreas.length === 0) {
+    return { error: "Connect at least one serving area." };
+  }
+
+  return { servingAreas };
+}
+
+export function validateScheduleRhythmsUpdate(
+  body: unknown,
+  allowedScheduleServingAreaIds: Set<number>
+): { rhythms?: UpdateScheduleRhythmInput[]; error?: string } {
+  if (!isRecord(body)) {
+    return { error: "Request body must be a JSON object." };
+  }
+
+  if (!Array.isArray(body.rhythms)) {
+    return { error: "Rhythms must be a list." };
+  }
+
+  if (body.rhythms.length === 0) {
+    return { error: "Add at least one service time." };
+  }
+
+  const rows: UpdateScheduleRhythmInput[] = [];
+
+  for (const item of body.rhythms) {
+    if (!isRecord(item)) {
+      return { error: "Each rhythm must be an object." };
+    }
+
+    const rhythmName = normalizeRequiredString(item.name);
+
+    if (!rhythmName) {
+      return { error: "Each rhythm needs a name." };
+    }
+
+    const dayOfWeek = normalizeRequiredString(item.dayOfWeek);
+
+    if (!dayOfWeek || !dayOfWeekValues.includes(dayOfWeek as DayOfWeek)) {
+      return { error: "Each rhythm needs a valid day of week." };
+    }
+
+    const startTime = normalizeStartTime(item.startTime);
+
+    if (!startTime) {
+      return { error: "Each rhythm needs a valid start time (HH:MM)." };
+    }
+
+    const requirements = normalizeRhythmRequirementsById(
+      item.requirements,
+      allowedScheduleServingAreaIds
+    );
+
+    if (typeof requirements === "string") {
+      return { error: requirements };
+    }
+
+    rows.push({
+      name: rhythmName,
+      dayOfWeek: dayOfWeek as DayOfWeek,
+      startTime,
+      requirements
+    });
+  }
+
+  return { rhythms: rows };
+}
+
+function normalizeRhythmRequirementsById(
+  value: unknown,
+  allowedScheduleServingAreaIds: Set<number>
+): UpdateScheduleRhythmRequirementInput[] | string {
+  if (value === undefined || value === null) {
+    return [];
+  }
+
+  if (!Array.isArray(value)) {
+    return "Staffing requirements must be a list.";
+  }
+
+  const rows: UpdateScheduleRhythmRequirementInput[] = [];
+
+  for (const item of value) {
+    if (!isRecord(item)) {
+      return "Each staffing requirement must be an object.";
+    }
+
+    const scheduleServingAreaId = Number(item.scheduleServingAreaId);
+
+    if (!Number.isInteger(scheduleServingAreaId) || scheduleServingAreaId < 1) {
+      return "Each staffing row must use a connected serving area.";
+    }
+
+    if (!allowedScheduleServingAreaIds.has(scheduleServingAreaId)) {
+      return "Each staffing row must use a serving area connected to this schedule.";
+    }
+
+    const neededCount = Number(item.neededCount);
+
+    if (!Number.isInteger(neededCount) || neededCount < 1) {
+      return "Needed count must be a whole number of at least 1.";
+    }
+
+    rows.push({ scheduleServingAreaId, neededCount });
+  }
+
+  return rows;
+}
+
 export function validateCreateScheduleBody(body: unknown): { input?: CreateScheduleInput; error?: string } {
   if (!isRecord(body)) {
     return { error: "Request body must be a JSON object." };
