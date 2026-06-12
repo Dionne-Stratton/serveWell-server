@@ -80,6 +80,8 @@ Migrations live in `migrations/`:
 - `0009_planning_center_import.sql` — Planning Center import metadata on volunteer submissions
 - `0010_submission_blackout_dates.sql` — unavailable date ranges per submission
 - `0011_volunteer_update_pending_snapshot.sql` — JSON snapshot of intake before volunteer self-edit (for admin change review)
+- `0012_schedules.sql` — schedules, connected serving areas, rhythms, and staffing requirements
+- `0013_schedule_type_monthly_special_event.sql` — schedule type `monthly` or `special_event` (replaces `recurring`)
 
 **Email (Resend):** set `RESEND_API_KEY` (and optionally `RESEND_FROM`) on the Worker. Without a key, local dev logs password-reset URLs to the console and skips other outbound mail.
 
@@ -216,7 +218,17 @@ OAuth callback is a browser redirect (no JWT). Admin routes require `Authorizati
 | `GET` | `/api/admin/integrations/planning-center/import-sources` | Distinct PC tab names used for imports (Volunteers filter) |
 | `POST` | `/api/admin/integrations/planning-center/import` | Create one import record from a PC person + tab (`form_id` null; `409` if same person+tab) |
 
-Requires migration `0006` and Planning Center app credentials in Worker secrets / `.dev.vars`. Import metadata columns require migration `0009`. Blackout dates require migration `0010`.
+### Admin — Schedules (JWT)
+
+| Method | Path | Notes |
+|--------|------|--------|
+| `GET` | `/api/admin/schedules` | List schedules for the admin’s organization |
+| `GET` | `/api/admin/schedules/serving-area-options` | Forms and active serving areas for the create wizard |
+| `POST` | `/api/admin/schedules` | Create schedule (name, serving areas, rhythms, staffing requirements) |
+
+Requires migrations `0012` and `0013` for schedules.
+
+Requires migration `0006` and Planning Center app credentials in Worker secrets / `.dev.vars` for Planning Center routes. Import metadata columns require migration `0009`. Blackout dates require migration `0010`.
 
 On successful OAuth connect, the server ensures one People tab per volunteer form, named **SW: {form name}** (for example **SW: Volunteering**), each with the same custom fields (Overall Frequency, Frequency Limits, Availability, Special Events, Requirements, Serving areas, Last synced). Tab and field IDs are stored in `organization_integrations.settings_json` under `formTabs` (keyed by form id). New forms created while connected get a matching tab automatically. If setup fails, connect still completes and the admin redirect includes `fieldsSetup=error`.
 

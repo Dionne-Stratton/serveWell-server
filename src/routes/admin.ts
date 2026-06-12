@@ -39,6 +39,7 @@ import {
   buildAdminFormDetailResponse,
   tryAdminFormManagementRoute
 } from "./adminFormManagement";
+import { tryAdminSchedulesRoute } from "./adminSchedules";
 import {
   deleteAdminSubmission,
   getAdminSubmissionDetail,
@@ -135,6 +136,12 @@ export async function adminRoutes(
     }
 
     return methodNotAllowed();
+  }
+
+  const schedulesResponse = await tryAdminSchedulesRoute(request, env, url.pathname);
+
+  if (schedulesResponse) {
+    return schedulesResponse;
   }
 
   const formManagementResponse = await tryAdminFormManagementRoute(
