@@ -1,8 +1,11 @@
 import { requireAdmin } from "../auth/adminGuard";
 import {
   createGeneratedScheduleFromTemplate,
+  deleteGeneratedSchedule,
   getGeneratedScheduleDetail,
-  listGeneratedSchedules
+  getGeneratedScheduleOccurrenceDetail,
+  listGeneratedSchedules,
+  replaceGeneratedScheduleOccurrenceStaffing
 } from "../db/adminGeneratedSchedules";
 import { badRequest, json, methodNotAllowed, notFound, serverError } from "../http/responses";
 import type { Env } from "../types";
@@ -10,6 +13,7 @@ import {
   validateCreateGeneratedScheduleBody,
   validateRangeForTemplateType
 } from "../validation/generatedSchedules";
+import { validateUpdateOccurrenceStaffingBody } from "../validation/generatedOccurrenceStaffing";
 import type { ScheduleType } from "../validation/schedules";
 
 export async function tryAdminGeneratedSchedulesRoute(
@@ -29,6 +33,34 @@ export async function tryAdminGeneratedSchedulesRoute(
     return methodNotAllowed();
   }
 
+  const occurrenceMatch = pathname.match(
+    /^\/api\/admin\/generated-schedules\/(\d+)\/occurrences\/(\d+)$/
+  );
+
+  if (occurrenceMatch) {
+    const generatedScheduleId = Number(occurrenceMatch[1]);
+    const occurrenceId = Number(occurrenceMatch[2]);
+
+    if (
+      !Number.isInteger(generatedScheduleId) ||
+      generatedScheduleId < 1 ||
+      !Number.isInteger(occurrenceId) ||
+      occurrenceId < 1
+    ) {
+      return notFound();
+    }
+
+    if (request.method === "GET") {
+      return getGeneratedOccurrence(request, env, generatedScheduleId, occurrenceId);
+    }
+
+    if (request.method === "PATCH") {
+      return patchGeneratedOccurrence(request, env, generatedScheduleId, occurrenceId);
+    }
+
+    return methodNotAllowed();
+  }
+
   const detailMatch = pathname.match(/^\/api\/admin\/generated-schedules\/(\d+)$/);
 
   if (detailMatch) {
@@ -40,6 +72,10 @@ export async function tryAdminGeneratedSchedulesRoute(
 
     if (request.method === "GET") {
       return getGenerated(request, env, generatedScheduleId);
+    }
+
+    if (request.method === "DELETE") {
+      return deleteGenerated(request, env, generatedScheduleId);
     }
 
     return methodNotAllowed();
@@ -97,6 +133,38 @@ async function getGenerated(
   } catch (error) {
     console.error("Failed to load generated schedule", error);
     return serverError("Unable to load generated schedule.");
+  }
+}
+
+async function deleteGenerated(
+  request: Request,
+  env: Env,
+  generatedScheduleId: number
+): Promise<Response> {
+  const auth = await requireAdmin(request, env);
+
+  if (auth.response) {
+    return auth.response;
+  }
+
+  try {
+    const deleted = await deleteGeneratedSchedule(
+      env,
+      auth.admin!.organizationId,
+      generatedScheduleId
+    );
+
+    if (!deleted) {
+      return notFound();
+    }
+
+    return json({
+      success: true,
+      data: { deleted: true }
+    });
+  } catch (error) {
+    console.error("Failed to delete generated schedule", error);
+    return serverError("Unable to delete schedule.");
   }
 }
 
@@ -186,5 +254,104 @@ async function postGenerated(request: Request, env: Env): Promise<Response> {
 
     console.error("Failed to create generated schedule", error);
     return serverError("Unable to create generated schedule.");
+  }
+}
+
+async function getGeneratedOccurrence(
+  request: Request,
+  env: Env,
+  generatedScheduleId: number,
+  occurrenceId: number
+): Promise<Response> {
+  const auth = await requireAdmin(request, env);
+
+  if (auth.response) {
+    return auth.response;
+  }
+
+  try {
+    const occurrence = await getGeneratedScheduleOccurrenceDetail(
+      env,
+      auth.admin!.organizationId,
+      generatedScheduleId,
+      occurrenceId
+    );
+
+    if (!occurrence) {
+      return notFound();
+    }
+
+    return json({
+      success: true,
+      data: { occurrence }
+    });
+  } catch (error) {
+    console.error("Failed to load generated schedule occurrence", error);
+    return serverError("Unable to load event.");
+  }
+}
+
+async function patchGeneratedOccurrence(
+  request: Request,
+  env: Env,
+  generatedScheduleId: number,
+  occurrenceId: number
+): Promise<Response> {
+  const auth = await requireAdmin(request, env);
+
+  if (auth.response) {
+    return auth.response;
+  }
+
+  let body: unknown;
+
+  try {
+    body = await request.json();
+  } catch {
+    return badRequest("Invalid JSON body.");
+  }
+
+  const parsed = validateUpdateOccurrenceStaffingBody(body);
+
+  if (!parsed.ok) {
+    return badRequest(parsed.message);
+  }
+
+  try {
+    const result = await replaceGeneratedScheduleOccurrenceStaffing(
+      env,
+      auth.admin!.organizationId,
+      generatedScheduleId,
+      occurrenceId,
+      parsed.value
+    );
+
+    if (!result.ok) {
+      if (result.code === "NOT_FOUND") {
+        return notFound();
+      }
+
+      if (result.code === "INVALID_SERVING_AREA") {
+        return badRequest("Each serving area must be connected to the schedule template.");
+      }
+
+      if (result.code === "INVALID_REQUIREMENT_ID") {
+        return badRequest("One or more staffing rows could not be found for this event.");
+      }
+
+      if (result.code === "NEEDED_BELOW_ASSIGNED") {
+        return badRequest("Needed count cannot be less than the number already assigned.");
+      }
+
+      return badRequest("Unable to update staffing.");
+    }
+
+    return json({
+      success: true,
+      data: { occurrence: result.occurrence }
+    });
+  } catch (error) {
+    console.error("Failed to update generated schedule occurrence", error);
+    return serverError("Unable to update event staffing.");
   }
 }

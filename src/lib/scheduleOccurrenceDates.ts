@@ -125,34 +125,6 @@ export function listOccurrenceDatesForDayOfWeek(
   return dates;
 }
 
-function formatIsoDateUs(isoDate: string): string {
-  const [year, month, day] = isoDate.split("-").map(Number);
-  return new Date(year, month - 1, day).toLocaleDateString("en-US", { dateStyle: "medium" });
-}
-
-function formatIsoDateRangeUs(startDate: string, endDate: string): string {
-  if (startDate === endDate) {
-    return formatIsoDateUs(startDate);
-  }
-
-  return `${formatIsoDateUs(startDate)} – ${formatIsoDateUs(endDate)}`;
-}
-
-export function formatGeneratedScheduleName(
-  templateName: string,
-  scheduleType: string,
-  startDate: string,
-  endDate: string
-): string {
-  if (scheduleType === "monthly") {
-    const [year, month] = startDate.split("-").map(Number);
-    const label = new Date(year, month - 1, 1).toLocaleDateString("en-US", {
-      month: "long",
-      year: "numeric"
-    });
-
-    return `${templateName} — ${label}`;
-  }
-
-  return `${templateName} — ${formatIsoDateRangeUs(startDate, endDate)}`;
+export function formatGeneratedScheduleName(templateName: string): string {
+  return templateName.trim();
 }
