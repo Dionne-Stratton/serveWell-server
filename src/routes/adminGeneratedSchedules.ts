@@ -7,6 +7,11 @@ import {
   listGeneratedSchedules,
   replaceGeneratedScheduleOccurrenceStaffing
 } from "../db/adminGeneratedSchedules";
+import {
+  createOccurrenceAssignment,
+  deleteOccurrenceAssignment,
+  listEligibleVolunteersForRequirement
+} from "../db/adminGeneratedOccurrenceAssignments";
 import { badRequest, json, methodNotAllowed, notFound, serverError } from "../http/responses";
 import type { Env } from "../types";
 import {
@@ -28,6 +33,79 @@ export async function tryAdminGeneratedSchedulesRoute(
 
     if (request.method === "POST") {
       return postGenerated(request, env);
+    }
+
+    return methodNotAllowed();
+  }
+
+  const eligibleMatch = pathname.match(
+    /^\/api\/admin\/generated-schedules\/(\d+)\/occurrences\/(\d+)\/requirements\/(\d+)\/eligible-volunteers$/
+  );
+
+  if (eligibleMatch) {
+    const generatedScheduleId = Number(eligibleMatch[1]);
+    const occurrenceId = Number(eligibleMatch[2]);
+    const requirementId = Number(eligibleMatch[3]);
+
+    if (
+      !Number.isInteger(generatedScheduleId) ||
+      generatedScheduleId < 1 ||
+      !Number.isInteger(occurrenceId) ||
+      occurrenceId < 1 ||
+      !Number.isInteger(requirementId) ||
+      requirementId < 1
+    ) {
+      return notFound();
+    }
+
+    if (request.method === "GET") {
+      return getEligibleVolunteers(
+        request,
+        env,
+        generatedScheduleId,
+        occurrenceId,
+        requirementId
+      );
+    }
+
+    return methodNotAllowed();
+  }
+
+  const assignmentMatch = pathname.match(
+    /^\/api\/admin\/generated-schedules\/(\d+)\/occurrences\/(\d+)\/assignments(?:\/(\d+))?$/
+  );
+
+  if (assignmentMatch) {
+    const generatedScheduleId = Number(assignmentMatch[1]);
+    const occurrenceId = Number(assignmentMatch[2]);
+    const assignmentId = assignmentMatch[3] ? Number(assignmentMatch[3]) : null;
+
+    if (
+      !Number.isInteger(generatedScheduleId) ||
+      generatedScheduleId < 1 ||
+      !Number.isInteger(occurrenceId) ||
+      occurrenceId < 1
+    ) {
+      return notFound();
+    }
+
+    if (assignmentId === null && request.method === "POST") {
+      return postOccurrenceAssignment(request, env, generatedScheduleId, occurrenceId);
+    }
+
+    if (
+      assignmentId !== null &&
+      Number.isInteger(assignmentId) &&
+      assignmentId >= 1 &&
+      request.method === "DELETE"
+    ) {
+      return deleteOccurrenceAssignmentRoute(
+        request,
+        env,
+        generatedScheduleId,
+        occurrenceId,
+        assignmentId
+      );
     }
 
     return methodNotAllowed();
@@ -353,5 +431,180 @@ async function patchGeneratedOccurrence(
   } catch (error) {
     console.error("Failed to update generated schedule occurrence", error);
     return serverError("Unable to update event staffing.");
+  }
+}
+
+async function getEligibleVolunteers(
+  request: Request,
+  env: Env,
+  generatedScheduleId: number,
+  occurrenceId: number,
+  requirementId: number
+): Promise<Response> {
+  const auth = await requireAdmin(request, env);
+
+  if (auth.response) {
+    return auth.response;
+  }
+
+  try {
+    const volunteers = await listEligibleVolunteersForRequirement(
+      env,
+      auth.admin!.organizationId,
+      generatedScheduleId,
+      occurrenceId,
+      requirementId
+    );
+
+    if (volunteers === null) {
+      return notFound();
+    }
+
+    return json({
+      success: true,
+      data: { volunteers }
+    });
+  } catch (error) {
+    console.error("Failed to list eligible volunteers", error);
+    return serverError("Unable to load eligible volunteers.");
+  }
+}
+
+async function postOccurrenceAssignment(
+  request: Request,
+  env: Env,
+  generatedScheduleId: number,
+  occurrenceId: number
+): Promise<Response> {
+  const auth = await requireAdmin(request, env);
+
+  if (auth.response) {
+    return auth.response;
+  }
+
+  let body: unknown;
+
+  try {
+    body = await request.json();
+  } catch {
+    return badRequest("Invalid JSON body.");
+  }
+
+  if (!body || typeof body !== "object") {
+    return badRequest("Request body is required.");
+  }
+
+  const record = body as Record<string, unknown>;
+  const requirementId = Number(record.requirementId);
+  const submissionId = Number(record.submissionId);
+
+  if (!Number.isInteger(requirementId) || requirementId < 1) {
+    return badRequest("Staffing need is required.");
+  }
+
+  if (!Number.isInteger(submissionId) || submissionId < 1) {
+    return badRequest("Volunteer is required.");
+  }
+
+  try {
+    const result = await createOccurrenceAssignment(
+      env,
+      auth.admin!.organizationId,
+      generatedScheduleId,
+      occurrenceId,
+      requirementId,
+      submissionId
+    );
+
+    if (!result.ok) {
+      if (result.code === "NOT_FOUND") {
+        return notFound();
+      }
+
+      if (result.code === "FULL") {
+        return badRequest("This serving area is already fully staffed for this event.");
+      }
+
+      if (result.code === "DUPLICATE") {
+        return badRequest("That volunteer is already assigned to this serving area.");
+      }
+
+      if (result.code === "INELIGIBLE") {
+        return badRequest(
+          "That volunteer is not eligible. They must be an active submission with this serving area as an interest."
+        );
+      }
+
+      return badRequest("Unable to assign volunteer.");
+    }
+
+    const occurrence = await getGeneratedScheduleOccurrenceDetail(
+      env,
+      auth.admin!.organizationId,
+      generatedScheduleId,
+      occurrenceId
+    );
+
+    if (!occurrence) {
+      return notFound();
+    }
+
+    return json(
+      {
+        success: true,
+        data: { occurrence }
+      },
+      { status: 201 }
+    );
+  } catch (error) {
+    console.error("Failed to create occurrence assignment", error);
+    return serverError("Unable to assign volunteer.");
+  }
+}
+
+async function deleteOccurrenceAssignmentRoute(
+  request: Request,
+  env: Env,
+  generatedScheduleId: number,
+  occurrenceId: number,
+  assignmentId: number
+): Promise<Response> {
+  const auth = await requireAdmin(request, env);
+
+  if (auth.response) {
+    return auth.response;
+  }
+
+  try {
+    const result = await deleteOccurrenceAssignment(
+      env,
+      auth.admin!.organizationId,
+      generatedScheduleId,
+      occurrenceId,
+      assignmentId
+    );
+
+    if (!result.ok) {
+      return notFound();
+    }
+
+    const occurrence = await getGeneratedScheduleOccurrenceDetail(
+      env,
+      auth.admin!.organizationId,
+      generatedScheduleId,
+      occurrenceId
+    );
+
+    if (!occurrence) {
+      return notFound();
+    }
+
+    return json({
+      success: true,
+      data: { occurrence }
+    });
+  } catch (error) {
+    console.error("Failed to delete occurrence assignment", error);
+    return serverError("Unable to remove assignment.");
   }
 }

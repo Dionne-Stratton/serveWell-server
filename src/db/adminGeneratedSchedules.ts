@@ -2,8 +2,10 @@ import type { Env } from "../types";
 import {
   listOccurrenceDatesForDayOfWeek
 } from "../lib/scheduleOccurrenceDates";
-import type { ValidatedGeneratedScheduleRange } from "../validation/generatedSchedules";
+import type { OccurrenceVolunteerAssignment } from "./adminGeneratedOccurrenceAssignments";
+import { loadOccurrenceAssignmentsByRequirement } from "./adminGeneratedOccurrenceAssignments";
 import type { OccurrenceStaffingRequirementInput } from "../validation/generatedOccurrenceStaffing";
+import type { ValidatedGeneratedScheduleRange } from "../validation/generatedSchedules";
 
 export interface GeneratedScheduleListItem {
   id: number;
@@ -25,6 +27,7 @@ export interface GeneratedScheduleOccurrenceRequirement {
   displayName: string;
   neededCount: number;
   assignedCount: number;
+  assignments: OccurrenceVolunteerAssignment[];
 }
 
 export interface TemplateServingAreaOption {
@@ -188,22 +191,7 @@ export async function getGeneratedScheduleDetail(
   const occurrences: GeneratedScheduleOccurrence[] = [];
 
   for (const row of occurrencesResult.results ?? []) {
-    const requirementsResult = await env.DB.prepare(
-      `
-      SELECT id, schedule_serving_area_id, display_name, needed_count, assigned_count
-      FROM generated_schedule_occurrence_requirements
-      WHERE occurrence_id = ?
-      ORDER BY display_name ASC, id ASC
-      `
-    )
-      .bind(row.id)
-      .all<{
-        id: number;
-        schedule_serving_area_id: number | null;
-        display_name: string;
-        needed_count: number;
-        assigned_count: number;
-      }>();
+    const requirements = await loadOccurrenceRequirements(env, row.id);
 
     occurrences.push({
       id: row.id,
@@ -211,13 +199,7 @@ export async function getGeneratedScheduleDetail(
       name: row.name,
       startTime: row.start_time,
       templateRhythmId: row.template_rhythm_id,
-      requirements: (requirementsResult.results ?? []).map((req) => ({
-        id: req.id,
-        scheduleServingAreaId: req.schedule_serving_area_id,
-        displayName: req.display_name,
-        neededCount: req.needed_count,
-        assignedCount: req.assigned_count
-      }))
+      requirements
     });
   }
 
@@ -485,13 +467,21 @@ async function loadOccurrenceRequirements(
       assigned_count: number;
     }>();
 
-  return (requirementsResult.results ?? []).map((req) => ({
-    id: req.id,
-    scheduleServingAreaId: req.schedule_serving_area_id,
-    displayName: req.display_name,
-    neededCount: req.needed_count,
-    assignedCount: req.assigned_count
-  }));
+  const assignmentsByRequirement = await loadOccurrenceAssignmentsByRequirement(env, occurrenceId);
+
+  return (requirementsResult.results ?? []).map((req) => {
+    const assignments = assignmentsByRequirement.get(req.id) ?? [];
+    const assignedCount = assignments.length;
+
+    return {
+      id: req.id,
+      scheduleServingAreaId: req.schedule_serving_area_id,
+      displayName: req.display_name,
+      neededCount: req.needed_count,
+      assignedCount,
+      assignments
+    };
+  });
 }
 
 export async function getGeneratedScheduleOccurrenceDetail(
