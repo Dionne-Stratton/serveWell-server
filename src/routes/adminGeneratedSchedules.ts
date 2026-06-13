@@ -522,7 +522,7 @@ async function postOccurrenceAssignment(
       }
 
       if (result.code === "FULL") {
-        return badRequest("This serving area is already fully staffed for this event.");
+        return badRequest("This serving area is already covered for this event.");
       }
 
       if (result.code === "DUPLICATE") {
