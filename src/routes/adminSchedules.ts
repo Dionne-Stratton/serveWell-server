@@ -7,15 +7,15 @@ import {
   listScheduleServingAreaCatalog,
   replaceAdminScheduleRhythms,
   replaceAdminScheduleServingAreas,
-  updateAdminScheduleName
+  updateAdminScheduleTemplate
 } from "../db/adminSchedules";
 import { badRequest, json, methodNotAllowed, notFound, serverError } from "../http/responses";
 import type { Env } from "../types";
 import {
   validateCreateScheduleBody,
-  validateScheduleNamePatch,
   validateScheduleRhythmsUpdate,
-  validateScheduleServingAreasUpdate
+  validateScheduleServingAreasUpdate,
+  validateScheduleTemplatePatch
 } from "../validation/schedules";
 
 export async function tryAdminSchedulesRoute(
@@ -223,18 +223,25 @@ async function patchSchedule(
     return badRequest("Request body must be valid JSON.", "INVALID_JSON");
   }
 
-  const validation = validateScheduleNamePatch(body);
+  const validation = validateScheduleTemplatePatch(body);
 
-  if (!validation.name) {
-    return badRequest(validation.error ?? "Invalid schedule name.");
+  if (validation.error) {
+    return badRequest(validation.error);
+  }
+
+  if (!validation.name && !validation.scheduleType) {
+    return badRequest("Provide a template name and/or template type to update.");
   }
 
   try {
-    const updated = await updateAdminScheduleName(
+    const updated = await updateAdminScheduleTemplate(
       env,
       auth.admin!.organizationId,
       scheduleId,
-      validation.name
+      {
+        name: validation.name,
+        scheduleType: validation.scheduleType
+      }
     );
 
     if (!updated) {

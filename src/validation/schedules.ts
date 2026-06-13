@@ -87,20 +87,65 @@ export interface UpdateScheduleRhythmInput {
   requirements: UpdateScheduleRhythmRequirementInput[];
 }
 
-export function validateScheduleNamePatch(
+export function validateScheduleTemplatePatch(
   body: unknown
-): { name?: string; error?: string } {
+): { name?: string; scheduleType?: ScheduleType; error?: string } {
   if (!isRecord(body)) {
     return { error: "Request body must be a JSON object." };
   }
 
-  const name = normalizeRequiredString(body.name);
+  const hasName = body.name !== undefined;
+  const hasScheduleType = body.scheduleType !== undefined;
 
-  if (!name) {
+  if (!hasName && !hasScheduleType) {
+    return { error: "Provide a template name and/or template type to update." };
+  }
+
+  let name: string | undefined;
+
+  if (hasName) {
+    const normalized = normalizeRequiredString(body.name);
+
+    if (!normalized) {
+      return { error: "Schedule name is required." };
+    }
+
+    name = normalized;
+  }
+
+  let scheduleType: ScheduleType | undefined;
+
+  if (hasScheduleType) {
+    const raw =
+      typeof body.scheduleType === "string" && body.scheduleType.trim()
+        ? body.scheduleType.trim()
+        : "";
+
+    if (!scheduleTypes.includes(raw as ScheduleType)) {
+      return { error: "Template type must be monthly or special event." };
+    }
+
+    scheduleType = raw as ScheduleType;
+  }
+
+  return { name, scheduleType };
+}
+
+/** @deprecated use validateScheduleTemplatePatch */
+export function validateScheduleNamePatch(
+  body: unknown
+): { name?: string; error?: string } {
+  const result = validateScheduleTemplatePatch(body);
+
+  if (result.error) {
+    return { error: result.error };
+  }
+
+  if (!result.name) {
     return { error: "Schedule name is required." };
   }
 
-  return { name };
+  return { name: result.name };
 }
 
 export function validateScheduleServingAreasUpdate(

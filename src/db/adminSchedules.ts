@@ -460,20 +460,38 @@ async function listScheduleRhythmsWithRequirements(env: Env, scheduleId: number)
   }));
 }
 
-export async function updateAdminScheduleName(
+export async function updateAdminScheduleTemplate(
   env: Env,
   organizationId: number,
   scheduleId: number,
-  name: string
+  updates: { name?: string; scheduleType?: string }
 ): Promise<AdminScheduleDetail | null> {
+  const existing = await env.DB.prepare(
+    `
+    SELECT name, schedule_type
+    FROM schedules
+    WHERE id = ? AND organization_id = ?
+    LIMIT 1
+    `
+  )
+    .bind(scheduleId, organizationId)
+    .first<{ name: string; schedule_type: string }>();
+
+  if (!existing) {
+    return null;
+  }
+
+  const nextName = updates.name ?? existing.name;
+  const nextType = updates.scheduleType ?? existing.schedule_type;
+
   const result = await env.DB.prepare(
     `
     UPDATE schedules
-    SET name = ?, updated_at = CURRENT_TIMESTAMP
+    SET name = ?, schedule_type = ?, updated_at = CURRENT_TIMESTAMP
     WHERE id = ? AND organization_id = ?
     `
   )
-    .bind(name, scheduleId, organizationId)
+    .bind(nextName, nextType, scheduleId, organizationId)
     .run();
 
   if (!result.meta.changes) {
@@ -481,6 +499,15 @@ export async function updateAdminScheduleName(
   }
 
   return getAdminScheduleDetail(env, organizationId, scheduleId);
+}
+
+export async function updateAdminScheduleName(
+  env: Env,
+  organizationId: number,
+  scheduleId: number,
+  name: string
+): Promise<AdminScheduleDetail | null> {
+  return updateAdminScheduleTemplate(env, organizationId, scheduleId, { name });
 }
 
 export type ReplaceScheduleServingAreasResult =
