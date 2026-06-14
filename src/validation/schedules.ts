@@ -81,6 +81,7 @@ export interface UpdateScheduleRhythmRequirementInput {
 }
 
 export interface UpdateScheduleRhythmInput {
+  id?: number;
   name: string;
   dayOfWeek: DayOfWeek;
   startTime: string;
@@ -209,6 +210,18 @@ export function validateScheduleRhythmsUpdate(
       return { error: "Each rhythm needs a valid start time (HH:MM)." };
     }
 
+    let rhythmId: number | undefined;
+
+    if (item.id !== undefined && item.id !== null) {
+      const parsedId = Number(item.id);
+
+      if (!Number.isInteger(parsedId) || parsedId < 1) {
+        return { error: "Each rhythm id must be a positive integer when provided." };
+      }
+
+      rhythmId = parsedId;
+    }
+
     const requirements = normalizeRhythmRequirementsById(
       item.requirements,
       allowedScheduleServingAreaIds
@@ -219,11 +232,26 @@ export function validateScheduleRhythmsUpdate(
     }
 
     rows.push({
+      id: rhythmId,
       name: rhythmName,
       dayOfWeek: dayOfWeek as DayOfWeek,
       startTime,
       requirements
     });
+  }
+
+  const seenIds = new Set<number>();
+
+  for (const row of rows) {
+    if (row.id == null) {
+      continue;
+    }
+
+    if (seenIds.has(row.id)) {
+      return { error: "Each rhythm id may only appear once." };
+    }
+
+    seenIds.add(row.id);
   }
 
   return { rhythms: rows };

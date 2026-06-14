@@ -357,13 +357,25 @@ async function putScheduleRhythms(
       validation.rhythms
     );
 
-    if (!updated) {
+    if (updated.status === "not_found") {
       return notFound();
+    }
+
+    if (updated.status === "invalid_rhythm_id") {
+      return badRequest("One or more events could not be matched to this template.");
+    }
+
+    if (updated.status === "in_use") {
+      const names = updated.eventNames.join(", ");
+      return badRequest(
+        `Cannot remove event${updated.eventNames.length === 1 ? "" : "s"} used in a generated schedule: ${names}.`,
+        "RHYTHM_IN_USE"
+      );
     }
 
     return json({
       success: true,
-      data: updated
+      data: updated.detail
     });
   } catch (error) {
     console.error("Failed to update schedule rhythms", error);

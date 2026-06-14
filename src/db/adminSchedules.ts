@@ -676,12 +676,55 @@ export async function replaceAdminScheduleServingAreas(
   return detail ? { status: "ok", detail } : { status: "not_found" };
 }
 
+export type ReplaceScheduleRhythmsResult =
+  | { status: "ok"; detail: AdminScheduleDetail }
+  | { status: "not_found" }
+  | { status: "invalid_rhythm_id" }
+  | { status: "in_use"; eventNames: string[] };
+
+async function replaceRhythmRequirements(
+  env: Env,
+  organizationId: number,
+  rhythmId: number,
+  requirements: UpdateScheduleRhythmInput["requirements"]
+): Promise<void> {
+  await env.DB.prepare(
+    `
+    DELETE FROM schedule_rhythm_requirements
+    WHERE rhythm_id = ? AND organization_id = ?
+    `
+  )
+    .bind(rhythmId, organizationId)
+    .run();
+
+  for (const requirement of requirements) {
+    await env.DB.prepare(
+      `
+      INSERT INTO schedule_rhythm_requirements (
+        rhythm_id,
+        schedule_serving_area_id,
+        organization_id,
+        needed_count
+      )
+      VALUES (?, ?, ?, ?)
+      `
+    )
+      .bind(
+        rhythmId,
+        requirement.scheduleServingAreaId,
+        organizationId,
+        requirement.neededCount
+      )
+      .run();
+  }
+}
+
 export async function replaceAdminScheduleRhythms(
   env: Env,
   organizationId: number,
   scheduleId: number,
   rhythms: UpdateScheduleRhythmInput[]
-): Promise<AdminScheduleDetail | null> {
+): Promise<ReplaceScheduleRhythmsResult> {
   const schedule = await env.DB.prepare(
     `
     SELECT id FROM schedules WHERE id = ? AND organization_id = ? LIMIT 1
@@ -691,20 +734,55 @@ export async function replaceAdminScheduleRhythms(
     .first<{ id: number }>();
 
   if (!schedule) {
-    return null;
+    return { status: "not_found" };
   }
 
-  await env.DB.prepare(
+  const existingResult = await env.DB.prepare(
     `
-    DELETE FROM schedule_rhythms
+    SELECT id, name
+    FROM schedule_rhythms
     WHERE schedule_id = ? AND organization_id = ?
     `
   )
     .bind(scheduleId, organizationId)
-    .run();
+    .all<{ id: number; name: string }>();
+
+  const existingById = new Map(
+    (existingResult.results ?? []).map((row) => [row.id, row.name])
+  );
+  const retainedIds = new Set<number>();
 
   for (let rhythmIndex = 0; rhythmIndex < rhythms.length; rhythmIndex += 1) {
     const rhythm = rhythms[rhythmIndex];
+
+    if (rhythm.id != null) {
+      if (!existingById.has(rhythm.id)) {
+        return { status: "invalid_rhythm_id" };
+      }
+
+      await env.DB.prepare(
+        `
+        UPDATE schedule_rhythms
+        SET name = ?, day_of_week = ?, start_time = ?, sort_order = ?
+        WHERE id = ? AND schedule_id = ? AND organization_id = ?
+        `
+      )
+        .bind(
+          rhythm.name,
+          rhythm.dayOfWeek,
+          rhythm.startTime,
+          rhythmIndex,
+          rhythm.id,
+          scheduleId,
+          organizationId
+        )
+        .run();
+
+      await replaceRhythmRequirements(env, organizationId, rhythm.id, rhythm.requirements);
+      retainedIds.add(rhythm.id);
+      continue;
+    }
+
     const rhythmInsert = await env.DB.prepare(
       `
       INSERT INTO schedule_rhythms (
@@ -734,26 +812,44 @@ export async function replaceAdminScheduleRhythms(
       continue;
     }
 
-    for (const requirement of rhythm.requirements) {
-      await env.DB.prepare(
-        `
-        INSERT INTO schedule_rhythm_requirements (
-          rhythm_id,
-          schedule_serving_area_id,
-          organization_id,
-          needed_count
-        )
-        VALUES (?, ?, ?, ?)
-        `
-      )
-        .bind(
-          rhythmId,
-          requirement.scheduleServingAreaId,
-          organizationId,
-          requirement.neededCount
-        )
-        .run();
+    await replaceRhythmRequirements(env, organizationId, rhythmId, rhythm.requirements);
+    retainedIds.add(rhythmId);
+  }
+
+  const blockedRemovals: string[] = [];
+
+  for (const [existingId, existingName] of existingById) {
+    if (retainedIds.has(existingId)) {
+      continue;
     }
+
+    const usage = await env.DB.prepare(
+      `
+      SELECT COUNT(*) AS count
+      FROM generated_schedule_occurrences
+      WHERE template_rhythm_id = ?
+      `
+    )
+      .bind(existingId)
+      .first<{ count: number }>();
+
+    if ((usage?.count ?? 0) > 0) {
+      blockedRemovals.push(existingName);
+      continue;
+    }
+
+    await env.DB.prepare(
+      `
+      DELETE FROM schedule_rhythms
+      WHERE id = ? AND schedule_id = ? AND organization_id = ?
+      `
+    )
+      .bind(existingId, scheduleId, organizationId)
+      .run();
+  }
+
+  if (blockedRemovals.length > 0) {
+    return { status: "in_use", eventNames: blockedRemovals };
   }
 
   await env.DB.prepare(
@@ -766,7 +862,9 @@ export async function replaceAdminScheduleRhythms(
     .bind(scheduleId, organizationId)
     .run();
 
-  return getAdminScheduleDetail(env, organizationId, scheduleId);
+  const detail = await getAdminScheduleDetail(env, organizationId, scheduleId);
+
+  return detail ? { status: "ok", detail } : { status: "not_found" };
 }
 
 export async function deleteAdminSchedule(
