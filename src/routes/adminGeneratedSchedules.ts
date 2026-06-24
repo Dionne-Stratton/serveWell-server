@@ -13,6 +13,12 @@ import {
   deleteOccurrenceAssignment,
   listEligibleVolunteersForRequirement
 } from "../db/adminGeneratedOccurrenceAssignments";
+import {
+  createGeneratedOccurrenceNote,
+  deleteGeneratedOccurrenceNote,
+  updateGeneratedOccurrenceNote
+} from "../db/adminGeneratedOccurrenceNotes";
+import type { MutateOccurrenceNoteResult } from "../db/adminGeneratedOccurrenceNotes";
 import { badRequest, json, methodNotAllowed, notFound, serverError } from "../http/responses";
 import type { Env } from "../types";
 import {
@@ -20,6 +26,7 @@ import {
   validateRangeForTemplateType
 } from "../validation/generatedSchedules";
 import { validateUpdateOccurrenceStaffingBody } from "../validation/generatedOccurrenceStaffing";
+import { validateOccurrenceNoteBody } from "../validation/generatedOccurrenceNotes";
 import type { ScheduleType } from "../validation/schedules";
 
 export async function tryAdminGeneratedSchedulesRoute(
@@ -106,6 +113,61 @@ export async function tryAdminGeneratedSchedulesRoute(
         generatedScheduleId,
         occurrenceId,
         assignmentId
+      );
+    }
+
+    return methodNotAllowed();
+  }
+
+  const notesMatch = pathname.match(
+    /^\/api\/admin\/generated-schedules\/(\d+)\/occurrences\/(\d+)\/notes(?:\/(\d+))?$/
+  );
+
+  if (notesMatch) {
+    const generatedScheduleId = Number(notesMatch[1]);
+    const occurrenceId = Number(notesMatch[2]);
+    const noteId = notesMatch[3] ? Number(notesMatch[3]) : null;
+
+    if (
+      !Number.isInteger(generatedScheduleId) ||
+      generatedScheduleId < 1 ||
+      !Number.isInteger(occurrenceId) ||
+      occurrenceId < 1
+    ) {
+      return notFound();
+    }
+
+    if (noteId === null && request.method === "POST") {
+      return postGeneratedOccurrenceNote(request, env, generatedScheduleId, occurrenceId);
+    }
+
+    if (
+      noteId !== null &&
+      Number.isInteger(noteId) &&
+      noteId >= 1 &&
+      request.method === "PATCH"
+    ) {
+      return patchGeneratedOccurrenceNote(
+        request,
+        env,
+        generatedScheduleId,
+        occurrenceId,
+        noteId
+      );
+    }
+
+    if (
+      noteId !== null &&
+      Number.isInteger(noteId) &&
+      noteId >= 1 &&
+      request.method === "DELETE"
+    ) {
+      return deleteGeneratedOccurrenceNoteRoute(
+        request,
+        env,
+        generatedScheduleId,
+        occurrenceId,
+        noteId
       );
     }
 
@@ -388,6 +450,178 @@ async function postGenerated(request: Request, env: Env): Promise<Response> {
 
     console.error("Failed to create generated schedule", error);
     return serverError("Unable to create generated schedule.");
+  }
+}
+
+async function occurrenceAfterNoteMutation(
+  env: Env,
+  organizationId: number,
+  generatedScheduleId: number,
+  occurrenceId: number,
+  result: MutateOccurrenceNoteResult
+): Promise<Response> {
+  if (result.status === "not_found") {
+    return notFound();
+  }
+
+  if (result.status === "invalid_serving_area") {
+    return badRequest(
+      "Choose a serving area that has staffing needs on this event.",
+      "INVALID_SERVING_AREA"
+    );
+  }
+
+  if (result.status === "note_not_found") {
+    return notFound();
+  }
+
+  const occurrence = await getGeneratedScheduleOccurrenceDetail(
+    env,
+    organizationId,
+    generatedScheduleId,
+    occurrenceId
+  );
+
+  if (!occurrence) {
+    return notFound();
+  }
+
+  return json({
+    success: true,
+    data: { occurrence }
+  });
+}
+
+async function postGeneratedOccurrenceNote(
+  request: Request,
+  env: Env,
+  generatedScheduleId: number,
+  occurrenceId: number
+): Promise<Response> {
+  const auth = await requireAdmin(request, env);
+
+  if (auth.response) {
+    return auth.response;
+  }
+
+  let body: unknown;
+
+  try {
+    body = await request.json();
+  } catch {
+    return badRequest("Request body must be valid JSON.", "INVALID_JSON");
+  }
+
+  const validation = validateOccurrenceNoteBody(body);
+
+  if (typeof validation === "string") {
+    return badRequest(validation);
+  }
+
+  try {
+    const result = await createGeneratedOccurrenceNote(
+      env,
+      auth.admin!.organizationId,
+      generatedScheduleId,
+      occurrenceId,
+      validation
+    );
+
+    return occurrenceAfterNoteMutation(
+      env,
+      auth.admin!.organizationId,
+      generatedScheduleId,
+      occurrenceId,
+      result
+    );
+  } catch (error) {
+    console.error("Failed to create occurrence note", error);
+    return serverError("Unable to save note.");
+  }
+}
+
+async function patchGeneratedOccurrenceNote(
+  request: Request,
+  env: Env,
+  generatedScheduleId: number,
+  occurrenceId: number,
+  noteId: number
+): Promise<Response> {
+  const auth = await requireAdmin(request, env);
+
+  if (auth.response) {
+    return auth.response;
+  }
+
+  let body: unknown;
+
+  try {
+    body = await request.json();
+  } catch {
+    return badRequest("Request body must be valid JSON.", "INVALID_JSON");
+  }
+
+  const validation = validateOccurrenceNoteBody(body);
+
+  if (typeof validation === "string") {
+    return badRequest(validation);
+  }
+
+  try {
+    const result = await updateGeneratedOccurrenceNote(
+      env,
+      auth.admin!.organizationId,
+      generatedScheduleId,
+      occurrenceId,
+      noteId,
+      validation
+    );
+
+    return occurrenceAfterNoteMutation(
+      env,
+      auth.admin!.organizationId,
+      generatedScheduleId,
+      occurrenceId,
+      result
+    );
+  } catch (error) {
+    console.error("Failed to update occurrence note", error);
+    return serverError("Unable to save note.");
+  }
+}
+
+async function deleteGeneratedOccurrenceNoteRoute(
+  request: Request,
+  env: Env,
+  generatedScheduleId: number,
+  occurrenceId: number,
+  noteId: number
+): Promise<Response> {
+  const auth = await requireAdmin(request, env);
+
+  if (auth.response) {
+    return auth.response;
+  }
+
+  try {
+    const result = await deleteGeneratedOccurrenceNote(
+      env,
+      auth.admin!.organizationId,
+      generatedScheduleId,
+      occurrenceId,
+      noteId
+    );
+
+    return occurrenceAfterNoteMutation(
+      env,
+      auth.admin!.organizationId,
+      generatedScheduleId,
+      occurrenceId,
+      result
+    );
+  } catch (error) {
+    console.error("Failed to delete occurrence note", error);
+    return serverError("Unable to delete note.");
   }
 }
 
