@@ -19,6 +19,13 @@ import {
   updateGeneratedOccurrenceNote
 } from "../db/adminGeneratedOccurrenceNotes";
 import type { MutateOccurrenceNoteResult } from "../db/adminGeneratedOccurrenceNotes";
+import {
+  createGeneratedOccurrenceResource,
+  deleteGeneratedOccurrenceResource,
+  getGeneratedOccurrenceResourceDownload,
+  updateGeneratedOccurrenceResource
+} from "../db/adminGeneratedOccurrenceResources";
+import type { MutateOccurrenceResourceResult } from "../db/adminGeneratedOccurrenceResources";
 import { badRequest, json, methodNotAllowed, notFound, serverError } from "../http/responses";
 import type { Env } from "../types";
 import {
@@ -27,6 +34,12 @@ import {
 } from "../validation/generatedSchedules";
 import { validateUpdateOccurrenceStaffingBody } from "../validation/generatedOccurrenceStaffing";
 import { validateOccurrenceNoteBody } from "../validation/generatedOccurrenceNotes";
+import {
+  isOccurrenceResourceUploadFile,
+  parseOptionalDisplayNameFromForm,
+  parseOptionalScheduleServingAreaIdFromForm,
+  validateOccurrenceResourceMetadataBody
+} from "../validation/generatedOccurrenceResources";
 import type { ScheduleType } from "../validation/schedules";
 
 export async function tryAdminGeneratedSchedulesRoute(
@@ -113,6 +126,94 @@ export async function tryAdminGeneratedSchedulesRoute(
         generatedScheduleId,
         occurrenceId,
         assignmentId
+      );
+    }
+
+    return methodNotAllowed();
+  }
+
+  const resourceDownloadMatch = pathname.match(
+    /^\/api\/admin\/generated-schedules\/(\d+)\/occurrences\/(\d+)\/resources\/(\d+)\/download$/
+  );
+
+  if (resourceDownloadMatch) {
+    const generatedScheduleId = Number(resourceDownloadMatch[1]);
+    const occurrenceId = Number(resourceDownloadMatch[2]);
+    const resourceId = Number(resourceDownloadMatch[3]);
+
+    if (
+      !Number.isInteger(generatedScheduleId) ||
+      generatedScheduleId < 1 ||
+      !Number.isInteger(occurrenceId) ||
+      occurrenceId < 1 ||
+      !Number.isInteger(resourceId) ||
+      resourceId < 1
+    ) {
+      return notFound();
+    }
+
+    if (request.method === "GET") {
+      return getGeneratedOccurrenceResourceDownloadRoute(
+        request,
+        env,
+        generatedScheduleId,
+        occurrenceId,
+        resourceId
+      );
+    }
+
+    return methodNotAllowed();
+  }
+
+  const resourcesMatch = pathname.match(
+    /^\/api\/admin\/generated-schedules\/(\d+)\/occurrences\/(\d+)\/resources(?:\/(\d+))?$/
+  );
+
+  if (resourcesMatch) {
+    const generatedScheduleId = Number(resourcesMatch[1]);
+    const occurrenceId = Number(resourcesMatch[2]);
+    const resourceId = resourcesMatch[3] ? Number(resourcesMatch[3]) : null;
+
+    if (
+      !Number.isInteger(generatedScheduleId) ||
+      generatedScheduleId < 1 ||
+      !Number.isInteger(occurrenceId) ||
+      occurrenceId < 1
+    ) {
+      return notFound();
+    }
+
+    if (resourceId === null && request.method === "POST") {
+      return postGeneratedOccurrenceResource(request, env, generatedScheduleId, occurrenceId);
+    }
+
+    if (
+      resourceId !== null &&
+      Number.isInteger(resourceId) &&
+      resourceId >= 1 &&
+      request.method === "PATCH"
+    ) {
+      return patchGeneratedOccurrenceResource(
+        request,
+        env,
+        generatedScheduleId,
+        occurrenceId,
+        resourceId
+      );
+    }
+
+    if (
+      resourceId !== null &&
+      Number.isInteger(resourceId) &&
+      resourceId >= 1 &&
+      request.method === "DELETE"
+    ) {
+      return deleteGeneratedOccurrenceResourceRoute(
+        request,
+        env,
+        generatedScheduleId,
+        occurrenceId,
+        resourceId
       );
     }
 
@@ -622,6 +723,255 @@ async function deleteGeneratedOccurrenceNoteRoute(
   } catch (error) {
     console.error("Failed to delete occurrence note", error);
     return serverError("Unable to delete note.");
+  }
+}
+
+function contentDispositionAttachment(filename: string): string {
+  const safe = filename.replace(/[\r\n"]/g, "_");
+  const encoded = encodeURIComponent(safe);
+  return `attachment; filename="${safe}"; filename*=UTF-8''${encoded}`;
+}
+
+async function occurrenceAfterResourceMutation(
+  env: Env,
+  organizationId: number,
+  generatedScheduleId: number,
+  occurrenceId: number,
+  result: MutateOccurrenceResourceResult
+): Promise<Response> {
+  if (result.status === "not_found") {
+    return notFound();
+  }
+
+  if (result.status === "storage_unavailable") {
+    return serverError("File storage is not configured.");
+  }
+
+  if (result.status === "invalid_serving_area") {
+    return badRequest(
+      "Choose a serving area that has staffing needs on this event.",
+      "INVALID_SERVING_AREA"
+    );
+  }
+
+  if (result.status === "resource_not_found") {
+    return notFound();
+  }
+
+  if (result.status === "file_required") {
+    return badRequest("A file is required.", "FILE_REQUIRED");
+  }
+
+  if (result.status === "file_too_large") {
+    return badRequest("File must be 10 MB or smaller.", "FILE_TOO_LARGE");
+  }
+
+  const occurrence = await getGeneratedScheduleOccurrenceDetail(
+    env,
+    organizationId,
+    generatedScheduleId,
+    occurrenceId
+  );
+
+  if (!occurrence) {
+    return notFound();
+  }
+
+  return json({
+    success: true,
+    data: { occurrence }
+  });
+}
+
+async function postGeneratedOccurrenceResource(
+  request: Request,
+  env: Env,
+  generatedScheduleId: number,
+  occurrenceId: number
+): Promise<Response> {
+  const auth = await requireAdmin(request, env);
+
+  if (auth.response) {
+    return auth.response;
+  }
+
+  let formData: FormData;
+
+  try {
+    formData = await request.formData();
+  } catch {
+    return badRequest("Upload must be multipart form data.", "INVALID_FORM");
+  }
+
+  const fileEntry = formData.get("file");
+
+  if (!isOccurrenceResourceUploadFile(fileEntry) || fileEntry.size < 1) {
+    return badRequest("A file is required.", "FILE_REQUIRED");
+  }
+
+  const displayName = parseOptionalDisplayNameFromForm(formData.get("displayName"));
+  const areaParsed = parseOptionalScheduleServingAreaIdFromForm(
+    formData.get("scheduleServingAreaId")
+  );
+
+  if (typeof areaParsed === "string") {
+    return badRequest(areaParsed);
+  }
+
+  try {
+    const result = await createGeneratedOccurrenceResource(
+      env,
+      auth.admin!.organizationId,
+      generatedScheduleId,
+      occurrenceId,
+      {
+        file: fileEntry,
+        displayName,
+        scheduleServingAreaId: areaParsed
+      }
+    );
+
+    return occurrenceAfterResourceMutation(
+      env,
+      auth.admin!.organizationId,
+      generatedScheduleId,
+      occurrenceId,
+      result
+    );
+  } catch (error) {
+    console.error("Failed to upload occurrence resource", error);
+    return serverError("Unable to upload resource.");
+  }
+}
+
+async function patchGeneratedOccurrenceResource(
+  request: Request,
+  env: Env,
+  generatedScheduleId: number,
+  occurrenceId: number,
+  resourceId: number
+): Promise<Response> {
+  const auth = await requireAdmin(request, env);
+
+  if (auth.response) {
+    return auth.response;
+  }
+
+  let body: unknown;
+
+  try {
+    body = await request.json();
+  } catch {
+    return badRequest("Request body must be valid JSON.", "INVALID_JSON");
+  }
+
+  const validation = validateOccurrenceResourceMetadataBody(body);
+
+  if (typeof validation === "string") {
+    return badRequest(validation);
+  }
+
+  try {
+    const result = await updateGeneratedOccurrenceResource(
+      env,
+      auth.admin!.organizationId,
+      generatedScheduleId,
+      occurrenceId,
+      resourceId,
+      validation
+    );
+
+    return occurrenceAfterResourceMutation(
+      env,
+      auth.admin!.organizationId,
+      generatedScheduleId,
+      occurrenceId,
+      result
+    );
+  } catch (error) {
+    console.error("Failed to update occurrence resource", error);
+    return serverError("Unable to update resource.");
+  }
+}
+
+async function deleteGeneratedOccurrenceResourceRoute(
+  request: Request,
+  env: Env,
+  generatedScheduleId: number,
+  occurrenceId: number,
+  resourceId: number
+): Promise<Response> {
+  const auth = await requireAdmin(request, env);
+
+  if (auth.response) {
+    return auth.response;
+  }
+
+  try {
+    const result = await deleteGeneratedOccurrenceResource(
+      env,
+      auth.admin!.organizationId,
+      generatedScheduleId,
+      occurrenceId,
+      resourceId
+    );
+
+    return occurrenceAfterResourceMutation(
+      env,
+      auth.admin!.organizationId,
+      generatedScheduleId,
+      occurrenceId,
+      result
+    );
+  } catch (error) {
+    console.error("Failed to delete occurrence resource", error);
+    return serverError("Unable to delete resource.");
+  }
+}
+
+async function getGeneratedOccurrenceResourceDownloadRoute(
+  request: Request,
+  env: Env,
+  generatedScheduleId: number,
+  occurrenceId: number,
+  resourceId: number
+): Promise<Response> {
+  const auth = await requireAdmin(request, env);
+
+  if (auth.response) {
+    return auth.response;
+  }
+
+  try {
+    const result = await getGeneratedOccurrenceResourceDownload(
+      env,
+      auth.admin!.organizationId,
+      generatedScheduleId,
+      occurrenceId,
+      resourceId
+    );
+
+    if (result.status === "not_found" || result.status === "resource_not_found") {
+      return notFound();
+    }
+
+    if (result.status === "storage_unavailable") {
+      return serverError("File storage is not configured.");
+    }
+
+    const downloadName = result.displayName?.trim() || result.originalFilename;
+
+    return new Response(result.object.body, {
+      status: 200,
+      headers: {
+        "Content-Type": result.mimeType,
+        "Content-Disposition": contentDispositionAttachment(downloadName),
+        "Cache-Control": "private, no-store"
+      }
+    });
+  } catch (error) {
+    console.error("Failed to download occurrence resource", error);
+    return serverError("Unable to download resource.");
   }
 }
 

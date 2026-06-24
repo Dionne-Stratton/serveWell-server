@@ -1,6 +1,8 @@
 import type { Env } from "../types";
 import type { GeneratedOccurrenceNote } from "./adminGeneratedOccurrenceNotes";
 import { listGeneratedOccurrenceNotes } from "./adminGeneratedOccurrenceNotes";
+import type { GeneratedOccurrenceResource } from "./adminGeneratedOccurrenceResources";
+import { listGeneratedOccurrenceResources } from "./adminGeneratedOccurrenceResources";
 import {
   listOccurrenceDatesForDayOfWeek
 } from "../lib/scheduleOccurrenceDates";
@@ -49,6 +51,7 @@ export interface GeneratedScheduleOccurrenceDetail {
   requirements: GeneratedScheduleOccurrenceRequirement[];
   templateServingAreas: TemplateServingAreaOption[];
   notes: GeneratedOccurrenceNote[];
+  resources: GeneratedOccurrenceResource[];
 }
 
 export interface GeneratedScheduleOccurrence {
@@ -535,10 +538,11 @@ export async function getGeneratedScheduleOccurrenceDetail(
     return null;
   }
 
-  const [requirements, templateServingAreas, notes] = await Promise.all([
+  const [requirements, templateServingAreas, notes, resources] = await Promise.all([
     loadOccurrenceRequirements(env, row.id),
     listTemplateServingAreaOptions(env, organizationId, row.schedule_template_id),
-    listGeneratedOccurrenceNotes(env, organizationId, row.id)
+    listGeneratedOccurrenceNotes(env, organizationId, row.id),
+    listGeneratedOccurrenceResources(env, organizationId, row.id)
   ]);
 
   return {
@@ -551,7 +555,8 @@ export async function getGeneratedScheduleOccurrenceDetail(
     templateRhythmId: row.template_rhythm_id,
     requirements,
     templateServingAreas,
-    notes
+    notes,
+    resources
   };
 }
 

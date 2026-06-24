@@ -10,3 +10,7 @@ binding = "DB"
 database_name = "servewell-db"
 database_id = "dc36bf23-7787-4424-a48f-48cbe0e5528d"
 migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "OCCURRENCE_RESOURCES"
+bucket_name = "servewell-occurrence-resources"
