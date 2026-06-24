@@ -5,6 +5,7 @@ import {
   getGeneratedScheduleDetail,
   getGeneratedScheduleOccurrenceDetail,
   listGeneratedSchedules,
+  publishGeneratedSchedule,
   replaceGeneratedScheduleOccurrenceStaffing
 } from "../db/adminGeneratedSchedules";
 import {
@@ -139,6 +140,22 @@ export async function tryAdminGeneratedSchedulesRoute(
     return methodNotAllowed();
   }
 
+  const publishMatch = pathname.match(/^\/api\/admin\/generated-schedules\/(\d+)\/publish$/);
+
+  if (publishMatch) {
+    const generatedScheduleId = Number(publishMatch[1]);
+
+    if (!Number.isInteger(generatedScheduleId) || generatedScheduleId < 1) {
+      return notFound();
+    }
+
+    if (request.method === "POST") {
+      return postPublishGenerated(request, env, generatedScheduleId);
+    }
+
+    return methodNotAllowed();
+  }
+
   const detailMatch = pathname.match(/^\/api\/admin\/generated-schedules\/(\d+)$/);
 
   if (detailMatch) {
@@ -211,6 +228,45 @@ async function getGenerated(
   } catch (error) {
     console.error("Failed to load generated schedule", error);
     return serverError("Unable to load generated schedule.");
+  }
+}
+
+async function postPublishGenerated(
+  request: Request,
+  env: Env,
+  generatedScheduleId: number
+): Promise<Response> {
+  const auth = await requireAdmin(request, env);
+
+  if (auth.response) {
+    return auth.response;
+  }
+
+  try {
+    const result = await publishGeneratedSchedule(
+      env,
+      auth.admin!.organizationId,
+      generatedScheduleId
+    );
+
+    if (result.status === "not_found") {
+      return notFound();
+    }
+
+    if (result.status === "not_draft") {
+      return badRequest(
+        "Only draft schedules can be published.",
+        "SCHEDULE_NOT_DRAFT"
+      );
+    }
+
+    return json({
+      success: true,
+      data: { generatedSchedule: result.detail }
+    });
+  } catch (error) {
+    console.error("Failed to publish generated schedule", error);
+    return serverError("Unable to publish schedule.");
   }
 }
 

@@ -17,6 +17,7 @@ export interface GeneratedScheduleListItem {
   templateName: string;
   templateScheduleType: string;
   occurrenceCount: number;
+  publishedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -65,6 +66,7 @@ export interface GeneratedScheduleDetail {
   scheduleTemplateId: number;
   templateName: string;
   templateScheduleType: string;
+  publishedAt: string | null;
   createdAt: string;
   updatedAt: string;
   occurrences: GeneratedScheduleOccurrence[];
@@ -85,6 +87,7 @@ export async function listGeneratedSchedules(
       gs.schedule_template_id,
       gs.created_at,
       gs.updated_at,
+      gs.published_at,
       s.name AS template_name,
       s.schedule_type AS template_schedule_type,
       (
@@ -108,6 +111,7 @@ export async function listGeneratedSchedules(
       schedule_template_id: number;
       created_at: string;
       updated_at: string;
+      published_at: string | null;
       template_name: string;
       template_schedule_type: string;
       occurrence_count: number;
@@ -123,6 +127,7 @@ export async function listGeneratedSchedules(
     templateName: row.template_name,
     templateScheduleType: row.template_schedule_type,
     occurrenceCount: row.occurrence_count,
+    publishedAt: row.published_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }));
@@ -144,6 +149,7 @@ export async function getGeneratedScheduleDetail(
       gs.schedule_template_id,
       gs.created_at,
       gs.updated_at,
+      gs.published_at,
       s.name AS template_name,
       s.schedule_type AS template_schedule_type
     FROM generated_schedules gs
@@ -162,6 +168,7 @@ export async function getGeneratedScheduleDetail(
       schedule_template_id: number;
       created_at: string;
       updated_at: string;
+      published_at: string | null;
       template_name: string;
       template_schedule_type: string;
     }>();
@@ -212,6 +219,7 @@ export async function getGeneratedScheduleDetail(
     scheduleTemplateId: header.schedule_template_id,
     templateName: header.template_name,
     templateScheduleType: header.template_schedule_type,
+    publishedAt: header.published_at,
     createdAt: header.created_at,
     updatedAt: header.updated_at,
     occurrences
@@ -684,6 +692,56 @@ export async function replaceGeneratedScheduleOccurrenceStaffing(
   }
 
   return { ok: true, occurrence: updated };
+}
+
+export type PublishGeneratedScheduleResult =
+  | { status: "ok"; detail: GeneratedScheduleDetail }
+  | { status: "not_found" }
+  | { status: "not_draft" };
+
+export async function publishGeneratedSchedule(
+  env: Env,
+  organizationId: number,
+  generatedScheduleId: number
+): Promise<PublishGeneratedScheduleResult> {
+  const existing = await env.DB.prepare(
+    `
+    SELECT id, status
+    FROM generated_schedules
+    WHERE id = ? AND organization_id = ?
+    LIMIT 1
+    `
+  )
+    .bind(generatedScheduleId, organizationId)
+    .first<{ id: number; status: string }>();
+
+  if (!existing) {
+    return { status: "not_found" };
+  }
+
+  if (existing.status !== "draft") {
+    return { status: "not_draft" };
+  }
+
+  const result = await env.DB.prepare(
+    `
+    UPDATE generated_schedules
+    SET status = 'published',
+        published_at = CURRENT_TIMESTAMP,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND organization_id = ? AND status = 'draft'
+    `
+  )
+    .bind(generatedScheduleId, organizationId)
+    .run();
+
+  if (!result.meta.changes) {
+    return { status: "not_draft" };
+  }
+
+  const detail = await getGeneratedScheduleDetail(env, organizationId, generatedScheduleId);
+
+  return detail ? { status: "ok", detail } : { status: "not_found" };
 }
 
 export async function deleteGeneratedSchedule(
