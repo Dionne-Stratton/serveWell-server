@@ -1,5 +1,6 @@
 JWT_SECRET="replace-with-local-development-secret"
 FRONTEND_ORIGIN="http://localhost:5173"
+PUBLIC_API_ORIGIN="http://127.0.0.1:8787"
 ENVIRONMENT="development"
 TEMP_EMAIL="church@example.com"
 TEMP_PASSWORD="temporary-password"

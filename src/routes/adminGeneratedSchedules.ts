@@ -27,6 +27,7 @@ import {
 } from "../db/adminGeneratedOccurrenceResources";
 import type { MutateOccurrenceResourceResult } from "../db/adminGeneratedOccurrenceResources";
 import { badRequest, json, methodNotAllowed, notFound, serverError } from "../http/responses";
+import { sendGeneratedSchedulePublicationEmails } from "../notifications/schedulePublicationEmails";
 import type { Env } from "../types";
 import {
   validateCreateGeneratedScheduleBody,
@@ -423,9 +424,18 @@ async function postPublishGenerated(
       );
     }
 
+    const publicationEmails = await sendGeneratedSchedulePublicationEmails(
+      env,
+      auth.admin!.organizationId,
+      generatedScheduleId
+    );
+
     return json({
       success: true,
-      data: { generatedSchedule: result.detail }
+      data: {
+        generatedSchedule: result.detail,
+        publicationEmails
+      }
     });
   } catch (error) {
     console.error("Failed to publish generated schedule", error);

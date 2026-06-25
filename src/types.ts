@@ -3,6 +3,8 @@ export interface Env {
   OCCURRENCE_RESOURCES?: R2Bucket;
   JWT_SECRET: string;
   FRONTEND_ORIGIN?: string;
+  /** Public Worker URL for signed links in emails (defaults to local wrangler port). */
+  PUBLIC_API_ORIGIN?: string;
   ENVIRONMENT?: "development" | "staging" | "production";
   PLANNING_CENTER_CLIENT_ID?: string;
   PLANNING_CENTER_CLIENT_SECRET?: string;

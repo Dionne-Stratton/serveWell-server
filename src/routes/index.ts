@@ -2,6 +2,7 @@ import { adminRoutes } from "./admin";
 import { authRoutes } from "./auth";
 import { organizationRoutes } from "./organizations";
 import { tryPublicVolunteerSubmissionEditRoute } from "./publicVolunteerSubmissionEdit";
+import { tryPublicOccurrenceResourceDownloadRoute } from "./publicOccurrenceResourceDownload";
 import { planningCenterRoutes } from "./planningCenter";
 import { volunteerRoutes } from "./volunteers";
 import { json, notFound } from "../http/responses";
@@ -44,6 +45,16 @@ export async function routeRequest(
 
   if (volunteerSelfEditResponse) {
     return volunteerSelfEditResponse;
+  }
+
+  const resourceDownloadResponse = await tryPublicOccurrenceResourceDownloadRoute(
+    request,
+    env,
+    url.pathname
+  );
+
+  if (resourceDownloadResponse) {
+    return resourceDownloadResponse;
   }
 
   if (url.pathname.startsWith("/api/organizations/")) {
