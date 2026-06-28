@@ -14,6 +14,7 @@ export interface GeneratedSchedulePublishAssignmentRow {
   firstName: string;
   lastName: string;
   email: string | null;
+  requirementId: number;
   occurrenceId: number;
   occurrenceDate: string;
   occurrenceName: string;
@@ -97,6 +98,7 @@ export async function loadGeneratedSchedulePublishEmailData(
       gso.occurrence_date,
       gso.name AS occurrence_name,
       gso.start_time,
+      greq.id AS requirement_id,
       greq.schedule_serving_area_id,
       greq.display_name AS serving_area_name
     FROM generated_schedule_occurrence_assignments a
@@ -120,6 +122,7 @@ export async function loadGeneratedSchedulePublishEmailData(
       occurrence_date: string;
       occurrence_name: string;
       start_time: string;
+      requirement_id: number;
       schedule_serving_area_id: number | null;
       serving_area_name: string;
     }>();
@@ -210,6 +213,7 @@ export async function loadGeneratedSchedulePublishEmailData(
     firstName: row.first_name,
     lastName: row.last_name,
     email: row.email,
+    requirementId: row.requirement_id,
     occurrenceId: row.occurrence_id,
     occurrenceDate: row.occurrence_date,
     occurrenceName: row.occurrence_name,

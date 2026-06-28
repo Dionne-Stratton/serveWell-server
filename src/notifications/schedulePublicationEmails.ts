@@ -6,10 +6,43 @@ import {
   type SchedulePublicationEventBlock
 } from "../email/sendSchedulePublicationEmail";
 import type { Env } from "../types";
-import {
-  buildResourceDownloadLinks
-} from "./schedulePublicationEmailContent";
+import { buildResourceDownloadLinks } from "./schedulePublicationEmailContent";
 import type { SchedulePublicationServingAreaBlock } from "../email/sendSchedulePublicationEmail";
+
+export interface SchedulePublicationEventBlockFilter {
+  occurrenceId?: number;
+  requirementId?: number;
+}
+
+export async function buildPublicationEventBlocksForVolunteer(
+  env: Env,
+  organizationId: number,
+  generatedScheduleId: number,
+  submissionId: number,
+  filter?: SchedulePublicationEventBlockFilter
+): Promise<SchedulePublicationEventBlock[]> {
+  const data = await loadGeneratedSchedulePublishEmailData(
+    env,
+    organizationId,
+    generatedScheduleId
+  );
+
+  if (!data) {
+    return [];
+  }
+
+  let assignments = data.assignments.filter((row) => row.submissionId === submissionId);
+
+  if (filter?.occurrenceId != null) {
+    assignments = assignments.filter((row) => row.occurrenceId === filter.occurrenceId);
+  }
+
+  if (filter?.requirementId != null) {
+    assignments = assignments.filter((row) => row.requirementId === filter.requirementId);
+  }
+
+  return buildEventBlocks(env, submissionId, assignments, data);
+}
 
 export interface SchedulePublicationEmailSummary {
   emailsSent: number;

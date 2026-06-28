@@ -5,31 +5,25 @@ import {
 } from "./scheduleEmailEventBodies";
 import type { Env } from "../types";
 
-export type {
-  SchedulePublicationEventBlock,
-  SchedulePublicationResourceLink,
-  SchedulePublicationServingAreaBlock
-} from "./scheduleEmailEventBodies";
-
-export interface SchedulePublicationEmailInput {
+export interface ScheduleUpdateEmailInput {
   to: string;
   firstName: string;
   scheduleName: string;
   events: SchedulePublicationEventBlock[];
 }
 
-export async function sendSchedulePublicationEmail(
+export async function sendScheduleUpdateEmail(
   env: Env,
-  input: SchedulePublicationEmailInput
+  input: ScheduleUpdateEmailInput
 ): Promise<boolean> {
   const apiKey = env.RESEND_API_KEY?.trim();
-  const subject = `Your schedule: ${input.scheduleName}`;
-  const html = buildPublicationHtml(input);
-  const text = buildPublicationText(input);
+  const subject = `Schedule update: ${input.scheduleName}`;
+  const html = buildHtml(input);
+  const text = buildText(input);
 
   if (!apiKey) {
     console.info(
-      `[ServeWell] Schedule publication email not sent (RESEND_API_KEY missing). → ${input.to}:`,
+      `[ServeWell] Schedule update email not sent (RESEND_API_KEY missing). → ${input.to}:`,
       subject
     );
     return false;
@@ -53,20 +47,20 @@ export async function sendSchedulePublicationEmail(
 
   if (!response.ok) {
     const body = await response.text().catch(() => "");
-    console.error("Resend schedule publication email failed", response.status, body);
+    console.error("Resend schedule update email failed", response.status, body);
     return false;
   }
 
   return true;
 }
 
-function buildPublicationText(input: SchedulePublicationEmailInput): string {
+function buildText(input: ScheduleUpdateEmailInput): string {
   const greetingName = input.firstName.trim() || "there";
   const eventSections = input.events.map((event) => formatScheduleEventText(event)).join("\n\n");
 
   return `Hi ${greetingName},
 
-You have been scheduled for ${input.scheduleName}.
+${input.scheduleName} has been updated:
 
 ${eventSections}
 
@@ -75,7 +69,7 @@ Thank you for serving.
 — ServeWell`;
 }
 
-function buildPublicationHtml(input: SchedulePublicationEmailInput): string {
+function buildHtml(input: ScheduleUpdateEmailInput): string {
   const greetingName = escapeHtml(input.firstName.trim() || "there");
   const scheduleName = escapeHtml(input.scheduleName);
   const eventHtml = input.events
@@ -84,7 +78,7 @@ function buildPublicationHtml(input: SchedulePublicationEmailInput): string {
 
   return `
     <p>Hi ${greetingName},</p>
-    <p>You have been scheduled for <strong>${scheduleName}</strong>.</p>
+    <p><strong>${scheduleName}</strong> has been updated:</p>
     ${eventHtml}
     <p>Thank you for serving.</p>
     <p style="color:#6b7280;font-size:12px;">ServeWell</p>

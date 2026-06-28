@@ -149,7 +149,7 @@ export async function listGeneratedOccurrenceResources(
 }
 
 export type MutateOccurrenceResourceResult =
-  | { status: "ok" }
+  | { status: "ok"; resourceId?: number }
   | { status: "not_found" }
   | { status: "invalid_serving_area" }
   | { status: "resource_not_found" }
@@ -203,8 +203,10 @@ export async function createGeneratedOccurrenceResource(
     httpMetadata: { contentType: mimeType }
   });
 
+  let resourceId = 0;
+
   try {
-    await env.DB.prepare(
+    const insertResult = await env.DB.prepare(
       `
       INSERT INTO generated_schedule_occurrence_resources (
         organization_id,
@@ -230,12 +232,18 @@ export async function createGeneratedOccurrenceResource(
         input.file.size
       )
       .run();
+
+    resourceId = Number(insertResult.meta.last_row_id);
   } catch (error) {
     await env.OCCURRENCE_RESOURCES.delete(storageKey);
     throw error;
   }
 
-  return { status: "ok" };
+  if (!Number.isInteger(resourceId) || resourceId < 1) {
+    throw new Error("Failed to resolve new occurrence resource id.");
+  }
+
+  return { status: "ok", resourceId };
 }
 
 export async function updateGeneratedOccurrenceResource(

@@ -22,6 +22,7 @@ export interface GeneratedScheduleListItem {
   templateScheduleType: string;
   occurrenceCount: number;
   publishedAt: string | null;
+  hasUnsentVolunteerUpdates: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -73,6 +74,7 @@ export interface GeneratedScheduleDetail {
   templateName: string;
   templateScheduleType: string;
   publishedAt: string | null;
+  hasUnsentVolunteerUpdates: boolean;
   createdAt: string;
   updatedAt: string;
   occurrences: GeneratedScheduleOccurrence[];
@@ -94,6 +96,7 @@ export async function listGeneratedSchedules(
       gs.created_at,
       gs.updated_at,
       gs.published_at,
+      gs.has_unsent_volunteer_updates,
       s.name AS template_name,
       s.schedule_type AS template_schedule_type,
       (
@@ -118,6 +121,7 @@ export async function listGeneratedSchedules(
       created_at: string;
       updated_at: string;
       published_at: string | null;
+      has_unsent_volunteer_updates: number;
       template_name: string;
       template_schedule_type: string;
       occurrence_count: number;
@@ -134,6 +138,7 @@ export async function listGeneratedSchedules(
     templateScheduleType: row.template_schedule_type,
     occurrenceCount: row.occurrence_count,
     publishedAt: row.published_at,
+    hasUnsentVolunteerUpdates: row.has_unsent_volunteer_updates === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }));
@@ -156,6 +161,7 @@ export async function getGeneratedScheduleDetail(
       gs.created_at,
       gs.updated_at,
       gs.published_at,
+      gs.has_unsent_volunteer_updates,
       s.name AS template_name,
       s.schedule_type AS template_schedule_type
     FROM generated_schedules gs
@@ -175,6 +181,7 @@ export async function getGeneratedScheduleDetail(
       created_at: string;
       updated_at: string;
       published_at: string | null;
+      has_unsent_volunteer_updates: number;
       template_name: string;
       template_schedule_type: string;
     }>();
@@ -226,6 +233,7 @@ export async function getGeneratedScheduleDetail(
     templateName: header.template_name,
     templateScheduleType: header.template_schedule_type,
     publishedAt: header.published_at,
+    hasUnsentVolunteerUpdates: header.has_unsent_volunteer_updates === 1,
     createdAt: header.created_at,
     updatedAt: header.updated_at,
     occurrences

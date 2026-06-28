@@ -26,8 +26,25 @@ import {
   updateGeneratedOccurrenceResource
 } from "../db/adminGeneratedOccurrenceResources";
 import type { MutateOccurrenceResourceResult } from "../db/adminGeneratedOccurrenceResources";
+import { clearPendingVolunteerUpdatesForSchedule } from "../db/generatedSchedulePendingVolunteerUpdates";
+import {
+  getOccurrenceEmailMeta,
+  loadAssignmentRemovalSnapshot,
+  loadOccurrenceNoteSnapshot,
+  loadOccurrenceResourceSnapshot,
+  resourceDisplayLabel,
+  scopeWithDisplayName
+} from "../db/generatedScheduleUpdateNotify";
 import { badRequest, json, methodNotAllowed, notFound, serverError } from "../http/responses";
 import { sendGeneratedSchedulePublicationEmails } from "../notifications/schedulePublicationEmails";
+import {
+  listPriorScheduleAssignmentsForSubmission,
+  queueScheduleAssignmentAdded,
+  queueScheduleAssignmentRemoved,
+  queueScheduleContentChanges,
+  sendConsolidatedScheduleVolunteerUpdates,
+  type ScheduleContentScopeChange
+} from "../notifications/scheduleUpdateNotifications";
 import type { Env } from "../types";
 import {
   validateCreateGeneratedScheduleBody,
@@ -42,6 +59,37 @@ import {
   validateOccurrenceResourceMetadataBody
 } from "../validation/generatedOccurrenceResources";
 import type { ScheduleType } from "../validation/schedules";
+
+async function tryQueueScheduleContentChanges(
+  env: Env,
+  organizationId: number,
+  generatedScheduleId: number,
+  occurrenceId: number,
+  scopeChanges: ScheduleContentScopeChange[]
+): Promise<void> {
+  try {
+    const occurrence = await getOccurrenceEmailMeta(
+      env,
+      organizationId,
+      generatedScheduleId,
+      occurrenceId
+    );
+
+    if (!occurrence) {
+      return;
+    }
+
+    await queueScheduleContentChanges(
+      env,
+      organizationId,
+      generatedScheduleId,
+      occurrence,
+      scopeChanges
+    );
+  } catch (error) {
+    console.error("Failed to queue schedule update notifications", error);
+  }
+}
 
 export async function tryAdminGeneratedSchedulesRoute(
   request: Request,
@@ -304,6 +352,24 @@ export async function tryAdminGeneratedSchedulesRoute(
     return methodNotAllowed();
   }
 
+  const sendVolunteerUpdatesMatch = pathname.match(
+    /^\/api\/admin\/generated-schedules\/(\d+)\/send-volunteer-updates$/
+  );
+
+  if (sendVolunteerUpdatesMatch) {
+    const generatedScheduleId = Number(sendVolunteerUpdatesMatch[1]);
+
+    if (!Number.isInteger(generatedScheduleId) || generatedScheduleId < 1) {
+      return notFound();
+    }
+
+    if (request.method === "POST") {
+      return postSendVolunteerUpdates(request, env, generatedScheduleId);
+    }
+
+    return methodNotAllowed();
+  }
+
   const publishMatch = pathname.match(/^\/api\/admin\/generated-schedules\/(\d+)\/publish$/);
 
   if (publishMatch) {
@@ -424,6 +490,12 @@ async function postPublishGenerated(
       );
     }
 
+    await clearPendingVolunteerUpdatesForSchedule(
+      env,
+      auth.admin!.organizationId,
+      generatedScheduleId
+    );
+
     const publicationEmails = await sendGeneratedSchedulePublicationEmails(
       env,
       auth.admin!.organizationId,
@@ -440,6 +512,66 @@ async function postPublishGenerated(
   } catch (error) {
     console.error("Failed to publish generated schedule", error);
     return serverError("Unable to publish schedule.");
+  }
+}
+
+async function postSendVolunteerUpdates(
+  request: Request,
+  env: Env,
+  generatedScheduleId: number
+): Promise<Response> {
+  const auth = await requireAdmin(request, env);
+
+  if (auth.response) {
+    return auth.response;
+  }
+
+  try {
+    const result = await sendConsolidatedScheduleVolunteerUpdates(
+      env,
+      auth.admin!.organizationId,
+      generatedScheduleId
+    );
+
+    if (result.status === "not_found") {
+      return notFound();
+    }
+
+    if (result.status === "not_published") {
+      return badRequest(
+        "Only published schedules can send volunteer updates.",
+        "SCHEDULE_NOT_PUBLISHED"
+      );
+    }
+
+    if (result.status === "nothing_pending") {
+      return badRequest("There are no unsent volunteer updates.", "NO_PENDING_UPDATES");
+    }
+
+    if (result.status === "send_failed") {
+      return serverError("Unable to send one or more volunteer update emails.");
+    }
+
+    const detail = await getGeneratedScheduleDetail(
+      env,
+      auth.admin!.organizationId,
+      generatedScheduleId
+    );
+
+    if (!detail) {
+      return notFound();
+    }
+
+    return json({
+      success: true,
+      data: {
+        generatedSchedule: detail,
+        volunteerUpdateEmails: result.summary
+      }
+    });
+  } catch (error) {
+    console.error("Failed to send volunteer schedule updates", error);
+    return serverError("Unable to send volunteer updates.");
   }
 }
 
@@ -638,6 +770,28 @@ async function postGeneratedOccurrenceNote(
       validation
     );
 
+    if (result.status === "ok") {
+      const scope = await scopeWithDisplayName(
+        env,
+        auth.admin!.organizationId,
+        validation.scheduleServingAreaId
+      );
+
+      await tryQueueScheduleContentChanges(
+        env,
+        auth.admin!.organizationId,
+        generatedScheduleId,
+        occurrenceId,
+        [
+          {
+            scope,
+            noteChanges: [{ action: "added", text: validation.note }],
+            resourceChanges: []
+          }
+        ]
+      );
+    }
+
     return occurrenceAfterNoteMutation(
       env,
       auth.admin!.organizationId,
@@ -679,6 +833,13 @@ async function patchGeneratedOccurrenceNote(
   }
 
   try {
+    const priorNote = await loadOccurrenceNoteSnapshot(
+      env,
+      auth.admin!.organizationId,
+      occurrenceId,
+      noteId
+    );
+
     const result = await updateGeneratedOccurrenceNote(
       env,
       auth.admin!.organizationId,
@@ -687,6 +848,53 @@ async function patchGeneratedOccurrenceNote(
       noteId,
       validation
     );
+
+    if (result.status === "ok") {
+      const newScope = await scopeWithDisplayName(
+        env,
+        auth.admin!.organizationId,
+        validation.scheduleServingAreaId
+      );
+      const scopeChanges: ScheduleContentScopeChange[] = [];
+
+      if (
+        priorNote &&
+        priorNote.scheduleServingAreaId !== validation.scheduleServingAreaId
+      ) {
+        const oldScope = await scopeWithDisplayName(
+          env,
+          auth.admin!.organizationId,
+          priorNote.scheduleServingAreaId
+        );
+
+        scopeChanges.push(
+          {
+            scope: oldScope,
+            noteChanges: [{ action: "removed", text: priorNote.note }],
+            resourceChanges: []
+          },
+          {
+            scope: newScope,
+            noteChanges: [{ action: "added", text: validation.note }],
+            resourceChanges: []
+          }
+        );
+      } else {
+        scopeChanges.push({
+          scope: newScope,
+          noteChanges: [{ action: "updated", text: validation.note }],
+          resourceChanges: []
+        });
+      }
+
+      await tryQueueScheduleContentChanges(
+        env,
+        auth.admin!.organizationId,
+        generatedScheduleId,
+        occurrenceId,
+        scopeChanges
+      );
+    }
 
     return occurrenceAfterNoteMutation(
       env,
@@ -715,6 +923,13 @@ async function deleteGeneratedOccurrenceNoteRoute(
   }
 
   try {
+    const priorNote = await loadOccurrenceNoteSnapshot(
+      env,
+      auth.admin!.organizationId,
+      occurrenceId,
+      noteId
+    );
+
     const result = await deleteGeneratedOccurrenceNote(
       env,
       auth.admin!.organizationId,
@@ -722,6 +937,28 @@ async function deleteGeneratedOccurrenceNoteRoute(
       occurrenceId,
       noteId
     );
+
+    if (result.status === "ok" && priorNote) {
+      const scope = await scopeWithDisplayName(
+        env,
+        auth.admin!.organizationId,
+        priorNote.scheduleServingAreaId
+      );
+
+      await tryQueueScheduleContentChanges(
+        env,
+        auth.admin!.organizationId,
+        generatedScheduleId,
+        occurrenceId,
+        [
+          {
+            scope,
+            noteChanges: [{ action: "removed", text: priorNote.note }],
+            resourceChanges: []
+          }
+        ]
+      );
+    }
 
     return occurrenceAfterNoteMutation(
       env,
@@ -841,6 +1078,25 @@ async function postGeneratedOccurrenceResource(
       }
     );
 
+    if (result.status === "ok" && result.resourceId != null) {
+      const scope = await scopeWithDisplayName(env, auth.admin!.organizationId, areaParsed);
+      const label = displayName?.trim() || fileEntry.name || "file";
+
+      await tryQueueScheduleContentChanges(
+        env,
+        auth.admin!.organizationId,
+        generatedScheduleId,
+        occurrenceId,
+        [
+          {
+            scope,
+            noteChanges: [],
+            resourceChanges: [{ action: "added", resourceId: result.resourceId, label }]
+          }
+        ]
+      );
+    }
+
     return occurrenceAfterResourceMutation(
       env,
       auth.admin!.organizationId,
@@ -882,6 +1138,13 @@ async function patchGeneratedOccurrenceResource(
   }
 
   try {
+    const priorResource = await loadOccurrenceResourceSnapshot(
+      env,
+      auth.admin!.organizationId,
+      occurrenceId,
+      resourceId
+    );
+
     const result = await updateGeneratedOccurrenceResource(
       env,
       auth.admin!.organizationId,
@@ -890,6 +1153,63 @@ async function patchGeneratedOccurrenceResource(
       resourceId,
       validation
     );
+
+    if (result.status === "ok" && priorResource) {
+      const priorLabel = resourceDisplayLabel(priorResource);
+      const newLabel =
+        validation.displayName?.trim() || priorResource.originalFilename;
+      const newScope = await scopeWithDisplayName(
+        env,
+        auth.admin!.organizationId,
+        validation.scheduleServingAreaId
+      );
+      const scopeChanges: ScheduleContentScopeChange[] = [];
+
+      if (
+        priorResource.scheduleServingAreaId !== validation.scheduleServingAreaId
+      ) {
+        const oldScope = await scopeWithDisplayName(
+          env,
+          auth.admin!.organizationId,
+          priorResource.scheduleServingAreaId
+        );
+
+        scopeChanges.push(
+          {
+            scope: oldScope,
+            noteChanges: [],
+            resourceChanges: [{ action: "removed", label: priorLabel }]
+          },
+          {
+            scope: newScope,
+            noteChanges: [],
+            resourceChanges: [
+              { action: "added", resourceId: priorResource.id, label: newLabel }
+            ]
+          }
+        );
+      } else {
+        scopeChanges.push({
+          scope: newScope,
+          noteChanges: [],
+          resourceChanges: [
+            {
+              action: "updated",
+              resourceId: priorResource.id,
+              label: newLabel
+            }
+          ]
+        });
+      }
+
+      await tryQueueScheduleContentChanges(
+        env,
+        auth.admin!.organizationId,
+        generatedScheduleId,
+        occurrenceId,
+        scopeChanges
+      );
+    }
 
     return occurrenceAfterResourceMutation(
       env,
@@ -918,6 +1238,13 @@ async function deleteGeneratedOccurrenceResourceRoute(
   }
 
   try {
+    const priorResource = await loadOccurrenceResourceSnapshot(
+      env,
+      auth.admin!.organizationId,
+      occurrenceId,
+      resourceId
+    );
+
     const result = await deleteGeneratedOccurrenceResource(
       env,
       auth.admin!.organizationId,
@@ -925,6 +1252,33 @@ async function deleteGeneratedOccurrenceResourceRoute(
       occurrenceId,
       resourceId
     );
+
+    if (result.status === "ok" && priorResource) {
+      const scope = await scopeWithDisplayName(
+        env,
+        auth.admin!.organizationId,
+        priorResource.scheduleServingAreaId
+      );
+
+      await tryQueueScheduleContentChanges(
+        env,
+        auth.admin!.organizationId,
+        generatedScheduleId,
+        occurrenceId,
+        [
+          {
+            scope,
+            noteChanges: [],
+            resourceChanges: [
+              {
+                action: "removed",
+                label: resourceDisplayLabel(priorResource)
+              }
+            ]
+          }
+        ]
+      );
+    }
 
     return occurrenceAfterResourceMutation(
       env,
@@ -1157,6 +1511,13 @@ async function postOccurrenceAssignment(
   }
 
   try {
+    const priorAssignments = await listPriorScheduleAssignmentsForSubmission(
+      env,
+      auth.admin!.organizationId,
+      generatedScheduleId,
+      submissionId
+    );
+
     const result = await createOccurrenceAssignment(
       env,
       auth.admin!.organizationId,
@@ -1186,6 +1547,20 @@ async function postOccurrenceAssignment(
       }
 
       return badRequest("Unable to assign volunteer.");
+    }
+
+    try {
+      await queueScheduleAssignmentAdded(
+        env,
+        auth.admin!.organizationId,
+        generatedScheduleId,
+        occurrenceId,
+        requirementId,
+        submissionId,
+        priorAssignments
+      );
+    } catch (notifyError) {
+      console.error("Failed to send assignment update notification", notifyError);
     }
 
     const occurrence = await getGeneratedScheduleOccurrenceDetail(
@@ -1226,6 +1601,14 @@ async function deleteOccurrenceAssignmentRoute(
   }
 
   try {
+    const removalSnapshot = await loadAssignmentRemovalSnapshot(
+      env,
+      auth.admin!.organizationId,
+      generatedScheduleId,
+      occurrenceId,
+      assignmentId
+    );
+
     const result = await deleteOccurrenceAssignment(
       env,
       auth.admin!.organizationId,
@@ -1236,6 +1619,19 @@ async function deleteOccurrenceAssignmentRoute(
 
     if (!result.ok) {
       return notFound();
+    }
+
+    if (removalSnapshot) {
+      try {
+        await queueScheduleAssignmentRemoved(
+          env,
+          auth.admin!.organizationId,
+          generatedScheduleId,
+          removalSnapshot
+        );
+      } catch (notifyError) {
+        console.error("Failed to send assignment removal notification", notifyError);
+      }
     }
 
     const occurrence = await getGeneratedScheduleOccurrenceDetail(
