@@ -128,11 +128,17 @@ CREATE TABLE IF NOT EXISTS volunteer_submissions (
   updated_by_admin_user_id INTEGER,
   planning_center_synced_at TEXT,
   planning_center_synced_by_admin_user_id INTEGER,
+  planning_center_imported_at TEXT,
+  planning_center_imported_by_admin_user_id INTEGER,
+  planning_center_import_tab_id TEXT,
+  planning_center_import_tab_name TEXT,
+  planning_center_import_custom_data_json TEXT,
   intake_updated_at TEXT,
   volunteer_self_updated_at TEXT,
   volunteer_update_review_needed INTEGER NOT NULL DEFAULT 0,
   volunteer_update_reviewed_at TEXT,
   volunteer_update_reviewed_by_admin_user_id INTEGER,
+  volunteer_update_pending_snapshot_json TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CHECK (email IS NOT NULL OR phone IS NOT NULL),
@@ -297,6 +303,10 @@ CREATE INDEX IF NOT EXISTS idx_submissions_org_form_status
 
 CREATE INDEX IF NOT EXISTS idx_submissions_planning_center_person
   ON volunteer_submissions (organization_id, planning_center_person_id)
+  WHERE planning_center_person_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_submissions_pc_import_lookup
+  ON volunteer_submissions (organization_id, form_id, planning_center_person_id)
   WHERE planning_center_person_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_interests_submission

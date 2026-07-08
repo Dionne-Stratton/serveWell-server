@@ -2,8 +2,8 @@ CREATE TABLE IF NOT EXISTS schedules (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   organization_id INTEGER NOT NULL,
   name TEXT NOT NULL,
-  schedule_type TEXT NOT NULL DEFAULT 'recurring'
-    CHECK (schedule_type IN ('recurring')),
+  schedule_type TEXT NOT NULL DEFAULT 'monthly'
+    CHECK (schedule_type IN ('monthly', 'special_event')),
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE

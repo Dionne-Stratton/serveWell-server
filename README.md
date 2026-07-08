@@ -70,28 +70,13 @@ For product direction and request/response shapes, see the sibling docs in the p
 
 Migrations live in `migrations/`:
 
-- `0001_schema.sql` — full ServeWell schema (organizations, forms, sections, submissions, Planning Center OAuth, admin invites, password reset, notification prefs, and related indexes)
+- `0001_schema.sql` — full ServeWell schema (organizations, forms, sections, submissions, Planning Center OAuth and import metadata, admin invites, password reset, notification prefs, volunteer self-edit tokens and update review, and related indexes)
 - `0002_seed_demo_organization_and_form.sql` — org `demo`, form `general-serving`, demo **owner** admin
 - `0003_seed_demo_serving_areas.sql` — demo form sections, serving areas, and requirements
 - `0004_seed_demo_sample_submissions.sql` — demo dashboard sample rows
-- `0005_volunteer_self_edit.sql` — `volunteer_self_updated_at` on submissions and `volunteer_submission_edit_tokens` for volunteer self-edit links
-- `0006_volunteer_updated_notify_default.sql` — enable `notify_volunteer_updated` for existing admins (new signups default on in schema)
-- `0007_volunteer_update_review.sql` — volunteer update review flag and reviewed metadata on submissions
-- `0008_purge_orphan_admin_users.sql` — remove admin rows left behind after organization deletes
-- `0009_planning_center_import.sql` — Planning Center import metadata on volunteer submissions
 - `0010_submission_blackout_dates.sql` — unavailable date ranges per submission
-- `0011_volunteer_update_pending_snapshot.sql` — JSON snapshot of intake before volunteer self-edit (for admin change review)
-- `0012_schedules.sql` — schedules, connected serving areas, rhythms, and staffing requirements
-- `0013_schedule_type_monthly_special_event.sql` — schedule type `monthly` or `special_event` (replaces `recurring`)
-- `0014_generated_schedules.sql` — generated schedules, occurrences, occurrence requirements
-- `0015_generated_schedule_statuses.sql` — `draft` / `published` / `archived` on generated schedules
-- `0016_generated_occurrence_serving_area.sql` — `schedule_serving_area_id` on occurrence requirements
-- `0017_generated_occurrence_assignments.sql` — volunteer assignments per requirement
-- `0018_generated_schedule_published_at.sql` — `published_at` timestamp
-- `0019_generated_occurrence_notes.sql` — notes per occurrence (general or serving area)
-- `0020_generated_occurrence_resources.sql` — resource metadata (files in R2)
-- `0021_occurrence_resource_access_tokens.sql` — hashed tokens for email download links
-- `0022_generated_schedule_unsent_volunteer_updates.sql` — `has_unsent_volunteer_updates` + pending update queue
+- `0012_schedules.sql` — schedules (`monthly` / `special_event`), connected serving areas, rhythms, and staffing requirements
+- `0014_generated_schedules.sql` — generated schedules (draft/published/archived, publish metadata, unsent volunteer updates), occurrences, requirements, assignments, notes, resources (R2 metadata), resource access tokens, pending update queue
 
 **R2 (occurrence resources):** `wrangler.toml` binds bucket `servewell-occurrence-resources` as `OCCURRENCE_RESOURCES`. Without the binding, resource upload returns storage unavailable.
 
@@ -246,7 +231,7 @@ OAuth callback is a browser redirect (no JWT). Admin routes require `Authorizati
 | `PUT` | `/api/admin/schedules/:id/serving-areas` | Replace linked serving areas |
 | `PUT` | `/api/admin/schedules/:id/rhythms` | Replace events and staffing requirements |
 
-Requires migrations `0012` and `0013`.
+Requires migration `0012`.
 
 ### Admin — Generated schedules (JWT)
 
@@ -263,9 +248,9 @@ Dated schedules created from templates. **Create** runs auto-assignment (draft s
 | `GET/PATCH` | `.../occurrences/:occurrenceId` | Occurrence detail / replace staffing needs |
 | Notes, resources, assignments | `.../occurrences/:occurrenceId/...` | See [API Contract](../docs/API-Contract.md) § Admin generated schedules |
 
-Requires migrations `0014`–`0022` and R2 binding for resources. Full request/response shapes: [API Contract](../docs/API-Contract.md).
+Requires migration `0014` and R2 binding for resources. Full request/response shapes: [API Contract](../docs/API-Contract.md).
 
-Requires migration `0006` and Planning Center app credentials in Worker secrets / `.dev.vars` for Planning Center routes. Import metadata columns require migration `0009`. Blackout dates require migration `0010`.
+Requires Planning Center app credentials in Worker secrets / `.dev.vars` for Planning Center routes. Import metadata columns are in `0001`. Blackout dates require migration `0010`.
 
 On successful OAuth connect, the server ensures one People tab per volunteer form, named **SW: {form name}** (for example **SW: Volunteering**), each with the same custom fields (Overall Frequency, Frequency Limits, Availability, Special Events, Requirements, Serving areas, Last synced). Tab and field IDs are stored in `organization_integrations.settings_json` under `formTabs` (keyed by form id). New forms created while connected get a matching tab automatically. If setup fails, connect still completes and the admin redirect includes `fieldsSetup=error`.
 
