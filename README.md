@@ -4,6 +4,7 @@ Cloudflare Worker API for ServeWell: multi-organization volunteer intake, form c
 
 For product direction and request/response shapes, see the sibling docs in the parent repo:
 
+- [Docs index](../docs/README.md)
 - [API Contract](../docs/API-Contract.md)
 - [Implementation plan](../docs/Implementation-Plan.md)
 - [Progress checklist](../docs/Implementation-Progress-Checklist.md)
@@ -82,8 +83,21 @@ Migrations live in `migrations/`:
 - `0011_volunteer_update_pending_snapshot.sql` — JSON snapshot of intake before volunteer self-edit (for admin change review)
 - `0012_schedules.sql` — schedules, connected serving areas, rhythms, and staffing requirements
 - `0013_schedule_type_monthly_special_event.sql` — schedule type `monthly` or `special_event` (replaces `recurring`)
+- `0014_generated_schedules.sql` — generated schedules, occurrences, occurrence requirements
+- `0015_generated_schedule_statuses.sql` — `draft` / `published` / `archived` on generated schedules
+- `0016_generated_occurrence_serving_area.sql` — `schedule_serving_area_id` on occurrence requirements
+- `0017_generated_occurrence_assignments.sql` — volunteer assignments per requirement
+- `0018_generated_schedule_published_at.sql` — `published_at` timestamp
+- `0019_generated_occurrence_notes.sql` — notes per occurrence (general or serving area)
+- `0020_generated_occurrence_resources.sql` — resource metadata (files in R2)
+- `0021_occurrence_resource_access_tokens.sql` — hashed tokens for email download links
+- `0022_generated_schedule_unsent_volunteer_updates.sql` — `has_unsent_volunteer_updates` + pending update queue
 
-**Email (Resend):** set `RESEND_API_KEY` (and optionally `RESEND_FROM`) on the Worker. Without a key, local dev logs password-reset URLs to the console and skips other outbound mail.
+**R2 (occurrence resources):** `wrangler.toml` binds bucket `servewell-occurrence-resources` as `OCCURRENCE_RESOURCES`. Without the binding, resource upload returns storage unavailable.
+
+**Email (Resend):** set `RESEND_API_KEY` (and optionally `RESEND_FROM`) on the Worker. Without a key, local dev logs password-reset URLs to the console and skips other outbound mail (including generated schedule publish/update emails).
+
+**Schedule email links:** set `PUBLIC_API_ORIGIN` to the Worker URL volunteers can reach (production: your `*.workers.dev` or custom domain). In local dev, `ENVIRONMENT=development` forces link generation to `http://127.0.0.1:8787` when using `npm run dev`. See `.dev.vars.example`.
 
 **Founder signup alerts:** set `FOUNDER_NOTIFY_EMAIL` (and `RESEND_API_KEY`) to receive an email on every `POST /api/auth/register`. Failures are logged only; signup still succeeds.
 
@@ -160,6 +174,7 @@ Public form payloads include **sections** (when present), serving areas, and req
 | `POST` | `/api/organizations/:organizationSlug/volunteer-submission-update-request` | Same, for org default form |
 | `GET` | `/api/public/volunteer-submission-edit?token=` | Load submission + form for self-edit |
 | `PUT` | `/api/public/volunteer-submission-edit` | Save self-edit (body: `token` + intake fields, including `blackoutDates`) |
+| `GET` | `/api/public/schedule-resources/download/{token}` | Download occurrence resource from schedule email link (hashed token; assignment must still be valid) |
 
 Legacy global routes (`GET /api/serving-areas`, `POST /api/volunteer-submissions`) are **removed**. Use the organization routes above (e.g. slug `demo`).
 
@@ -218,15 +233,37 @@ OAuth callback is a browser redirect (no JWT). Admin routes require `Authorizati
 | `GET` | `/api/admin/integrations/planning-center/import-sources` | Distinct PC tab names used for imports (Volunteers filter) |
 | `POST` | `/api/admin/integrations/planning-center/import` | Create one import record from a PC person + tab (`form_id` null; `409` if same person+tab) |
 
-### Admin — Schedules (JWT)
+### Admin — Schedule templates (JWT)
 
 | Method | Path | Notes |
 |--------|------|--------|
-| `GET` | `/api/admin/schedules` | List schedules for the admin’s organization |
+| `GET` | `/api/admin/schedules` | List templates for the admin’s organization |
 | `GET` | `/api/admin/schedules/serving-area-options` | Forms and active serving areas for the create wizard |
-| `POST` | `/api/admin/schedules` | Create schedule (name, serving areas, rhythms, staffing requirements) |
+| `POST` | `/api/admin/schedules` | Create template (name, type, serving areas, events/rhythms, staffing) |
+| `GET` | `/api/admin/schedules/:id` | Template detail |
+| `PATCH` | `/api/admin/schedules/:id` | Update template name / type |
+| `DELETE` | `/api/admin/schedules/:id` | Delete template |
+| `PUT` | `/api/admin/schedules/:id/serving-areas` | Replace linked serving areas |
+| `PUT` | `/api/admin/schedules/:id/rhythms` | Replace events and staffing requirements |
 
-Requires migrations `0012` and `0013` for schedules.
+Requires migrations `0012` and `0013`.
+
+### Admin — Generated schedules (JWT)
+
+Dated schedules created from templates. **Create** runs auto-assignment (draft stays draft until publish). **Publish** sends initial volunteer emails. Edits on **published** schedules queue update emails until `POST .../send-volunteer-updates`. Demo org skips outbound mail.
+
+| Method | Path | Notes |
+|--------|------|--------|
+| `GET` | `/api/admin/generated-schedules` | List (includes `hasUnsentVolunteerUpdates`) |
+| `POST` | `/api/admin/generated-schedules` | Create draft + auto-assign; returns `autoAssignSummary` |
+| `GET` | `/api/admin/generated-schedules/:id` | Detail with occurrences, assignments, counts |
+| `DELETE` | `/api/admin/generated-schedules/:id` | Delete generated schedule |
+| `POST` | `/api/admin/generated-schedules/:id/publish` | Publish + publication emails |
+| `POST` | `/api/admin/generated-schedules/:id/send-volunteer-updates` | Send queued update emails |
+| `GET/PATCH` | `.../occurrences/:occurrenceId` | Occurrence detail / replace staffing needs |
+| Notes, resources, assignments | `.../occurrences/:occurrenceId/...` | See [API Contract](../docs/API-Contract.md) § Admin generated schedules |
+
+Requires migrations `0014`–`0022` and R2 binding for resources. Full request/response shapes: [API Contract](../docs/API-Contract.md).
 
 Requires migration `0006` and Planning Center app credentials in Worker secrets / `.dev.vars` for Planning Center routes. Import metadata columns require migration `0009`. Blackout dates require migration `0010`.
 

@@ -11,5 +11,7 @@ PLANNING_CENTER_REDIRECT_URI_LOCAL="http://localhost:8787/api/planning-center/ca
 # Optional: password reset emails (without RESEND_API_KEY, reset links are logged in wrangler dev console)
 # RESEND_API_KEY="re_..."
 # RESEND_FROM="ServeWell <onboarding@resend.dev>"
+# Required for schedule publish/update emails in production; optional locally (emails skipped if unset)
+# PUBLIC_API_ORIGIN is set above for local resource download links in volunteer emails
 # Optional: founder inbox when a new organization registers (requires RESEND_API_KEY to send)
 # FOUNDER_NOTIFY_EMAIL="you@example.com"
