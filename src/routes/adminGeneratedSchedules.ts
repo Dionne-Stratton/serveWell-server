@@ -35,6 +35,7 @@ import {
   resourceDisplayLabel,
   scopeWithDisplayName
 } from "../db/generatedScheduleUpdateNotify";
+import { autoAssignGeneratedSchedule } from "../scheduling/autoAssignGeneratedSchedule";
 import { badRequest, json, methodNotAllowed, notFound, serverError } from "../http/responses";
 import { sendGeneratedSchedulePublicationEmails } from "../notifications/schedulePublicationEmails";
 import {
@@ -671,10 +672,25 @@ async function postGenerated(request: Request, env: Env): Promise<Response> {
       return serverError("Unable to create generated schedule.");
     }
 
+    const autoAssignSummary = await autoAssignGeneratedSchedule(
+      env,
+      auth.admin!.organizationId,
+      created.id
+    );
+
+    const detail = await getGeneratedScheduleDetail(
+      env,
+      auth.admin!.organizationId,
+      created.id
+    );
+
     return json(
       {
         success: true,
-        data: { generatedSchedule: created }
+        data: {
+          generatedSchedule: detail ?? created,
+          autoAssignSummary
+        }
       },
       { status: 201 }
     );
@@ -1542,7 +1558,7 @@ async function postOccurrenceAssignment(
 
       if (result.code === "INELIGIBLE") {
         return badRequest(
-          "That volunteer is not eligible. They must be an active submission with this serving area as an interest."
+          "That volunteer is not eligible. They must be approved / ready to schedule, not archived, and have this serving area as an interest."
         );
       }
 

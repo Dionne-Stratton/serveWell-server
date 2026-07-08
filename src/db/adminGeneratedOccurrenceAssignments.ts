@@ -1,4 +1,5 @@
 import type { Env } from "../types";
+import { schedulingReadyStatusSqlInList } from "../lib/submissionStatus";
 
 export interface OccurrenceVolunteerAssignment {
   id: number;
@@ -176,6 +177,7 @@ export async function listEligibleVolunteersForRequirement(
     INNER JOIN serving_areas sa ON sa.id = ssa.serving_area_id AND sa.id = vi.serving_area_id
     WHERE vs.organization_id = ?
       AND vs.is_archived = 0
+      AND vs.status IN (${schedulingReadyStatusSqlInList()})
       AND ssa.organization_id = ?
       AND NOT EXISTS (
         SELECT 1
@@ -285,6 +287,7 @@ export async function createOccurrenceAssignment(
     WHERE vs.id = ?
       AND vs.organization_id = ?
       AND vs.is_archived = 0
+      AND vs.status IN (${schedulingReadyStatusSqlInList()})
     LIMIT 1
     `
   )

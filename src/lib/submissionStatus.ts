@@ -27,3 +27,17 @@ export function isLegacyRequirementsPendingStatus(status: string): boolean {
 export function requirementsPendingStatusFilterValues(): string[] {
   return [REQUIREMENTS_PENDING_STATUS, ...LEGACY_REQUIREMENTS_PENDING];
 }
+
+/** Raw `volunteer_submissions.status` values that may be assigned on generated schedules. */
+export const SCHEDULING_READY_STATUS_DB_VALUES = [
+  "approved_ready_to_schedule",
+  LEGACY_ADDED_TO_PLANNING_CENTER
+] as const;
+
+export function isSchedulingReadySubmissionStatus(status: string): boolean {
+  return normalizeSubmissionStatus(status) === "approved_ready_to_schedule";
+}
+
+export function schedulingReadyStatusSqlInList(): string {
+  return SCHEDULING_READY_STATUS_DB_VALUES.map((value) => `'${value}'`).join(", ");
+}
