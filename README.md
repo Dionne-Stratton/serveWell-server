@@ -235,7 +235,7 @@ Requires migration `0012`.
 
 ### Admin — Generated schedules (JWT)
 
-Dated schedules created from templates. **Create** runs auto-assignment (draft stays draft until publish). **Publish** sends initial volunteer emails. Edits on **published** schedules queue update emails until `POST .../send-volunteer-updates`. Demo org skips outbound mail.
+Dated schedules created from templates. **Create** runs auto-assignment (draft stays draft until publish). **Publish** sends initial volunteer emails. Edits on **published** schedules queue update emails until `POST .../send-volunteer-updates`. **Archive** published schedules for read-only retention (`POST .../archive`). Demo org skips outbound mail.
 
 | Method | Path | Notes |
 |--------|------|--------|
@@ -244,6 +244,7 @@ Dated schedules created from templates. **Create** runs auto-assignment (draft s
 | `GET` | `/api/admin/generated-schedules/:id` | Detail with occurrences, assignments, counts |
 | `DELETE` | `/api/admin/generated-schedules/:id` | Delete generated schedule |
 | `POST` | `/api/admin/generated-schedules/:id/publish` | Publish + publication emails |
+| `POST` | `/api/admin/generated-schedules/:id/archive` | Archive published schedule (read-only; clears queued updates) |
 | `POST` | `/api/admin/generated-schedules/:id/send-volunteer-updates` | Send queued update emails |
 | `GET/PATCH` | `.../occurrences/:occurrenceId` | Occurrence detail / replace staffing needs |
 | Notes, resources, assignments | `.../occurrences/:occurrenceId/...` | See [API Contract](../docs/API-Contract.md) § Admin generated schedules |

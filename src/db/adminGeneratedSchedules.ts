@@ -762,6 +762,61 @@ export async function publishGeneratedSchedule(
   return detail ? { status: "ok", detail } : { status: "not_found" };
 }
 
+export type ArchiveGeneratedScheduleResult =
+  | { status: "ok"; detail: GeneratedScheduleDetail }
+  | { status: "not_found" }
+  | { status: "not_published" }
+  | { status: "already_archived" };
+
+export async function archiveGeneratedSchedule(
+  env: Env,
+  organizationId: number,
+  generatedScheduleId: number
+): Promise<ArchiveGeneratedScheduleResult> {
+  const existing = await env.DB.prepare(
+    `
+    SELECT id, status
+    FROM generated_schedules
+    WHERE id = ? AND organization_id = ?
+    LIMIT 1
+    `
+  )
+    .bind(generatedScheduleId, organizationId)
+    .first<{ id: number; status: string }>();
+
+  if (!existing) {
+    return { status: "not_found" };
+  }
+
+  if (existing.status === "archived") {
+    return { status: "already_archived" };
+  }
+
+  if (existing.status !== "published") {
+    return { status: "not_published" };
+  }
+
+  const result = await env.DB.prepare(
+    `
+    UPDATE generated_schedules
+    SET status = 'archived',
+        has_unsent_volunteer_updates = 0,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND organization_id = ? AND status = 'published'
+    `
+  )
+    .bind(generatedScheduleId, organizationId)
+    .run();
+
+  if (!result.meta.changes) {
+    return { status: "not_published" };
+  }
+
+  const detail = await getGeneratedScheduleDetail(env, organizationId, generatedScheduleId);
+
+  return detail ? { status: "ok", detail } : { status: "not_found" };
+}
+
 export async function deleteGeneratedSchedule(
   env: Env,
   organizationId: number,

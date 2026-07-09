@@ -1,5 +1,6 @@
 import { requireAdmin } from "../auth/adminGuard";
 import {
+  archiveGeneratedSchedule,
   createGeneratedScheduleFromTemplate,
   deleteGeneratedSchedule,
   getGeneratedScheduleDetail,
@@ -38,6 +39,7 @@ import {
 } from "../db/generatedScheduleUpdateNotify";
 import { autoAssignGeneratedSchedule } from "../scheduling/autoAssignGeneratedSchedule";
 import { badRequest, json, methodNotAllowed, notFound, serverError } from "../http/responses";
+import { rejectIfGeneratedScheduleArchived } from "../lib/generatedScheduleEditGuard";
 import { sendGeneratedSchedulePublicationEmails } from "../notifications/schedulePublicationEmails";
 import {
   queueScheduleAssignmentAdded,
@@ -387,6 +389,22 @@ export async function tryAdminGeneratedSchedulesRoute(
     return methodNotAllowed();
   }
 
+  const archiveMatch = pathname.match(/^\/api\/admin\/generated-schedules\/(\d+)\/archive$/);
+
+  if (archiveMatch) {
+    const generatedScheduleId = Number(archiveMatch[1]);
+
+    if (!Number.isInteger(generatedScheduleId) || generatedScheduleId < 1) {
+      return notFound();
+    }
+
+    if (request.method === "POST") {
+      return postArchiveGenerated(request, env, generatedScheduleId);
+    }
+
+    return methodNotAllowed();
+  }
+
   const detailMatch = pathname.match(/^\/api\/admin\/generated-schedules\/(\d+)$/);
 
   if (detailMatch) {
@@ -513,6 +531,55 @@ async function postPublishGenerated(
   } catch (error) {
     console.error("Failed to publish generated schedule", error);
     return serverError("Unable to publish schedule.");
+  }
+}
+
+async function postArchiveGenerated(
+  request: Request,
+  env: Env,
+  generatedScheduleId: number
+): Promise<Response> {
+  const auth = await requireAdmin(request, env);
+
+  if (auth.response) {
+    return auth.response;
+  }
+
+  try {
+    const result = await archiveGeneratedSchedule(
+      env,
+      auth.admin!.organizationId,
+      generatedScheduleId
+    );
+
+    if (result.status === "not_found") {
+      return notFound();
+    }
+
+    if (result.status === "already_archived") {
+      return badRequest("This schedule is already archived.", "SCHEDULE_ALREADY_ARCHIVED");
+    }
+
+    if (result.status === "not_published") {
+      return badRequest(
+        "Only published schedules can be archived.",
+        "SCHEDULE_NOT_PUBLISHED"
+      );
+    }
+
+    await clearPendingVolunteerUpdatesForSchedule(
+      env,
+      auth.admin!.organizationId,
+      generatedScheduleId
+    );
+
+    return json({
+      success: true,
+      data: { generatedSchedule: result.detail }
+    });
+  } catch (error) {
+    console.error("Failed to archive generated schedule", error);
+    return serverError("Unable to archive schedule.");
   }
 }
 
@@ -763,6 +830,16 @@ async function postGeneratedOccurrenceNote(
     return auth.response;
   }
 
+  const archivedBlock = await rejectIfGeneratedScheduleArchived(
+    env,
+    auth.admin!.organizationId,
+    generatedScheduleId
+  );
+
+  if (archivedBlock) {
+    return archivedBlock;
+  }
+
   let body: unknown;
 
   try {
@@ -832,6 +909,16 @@ async function patchGeneratedOccurrenceNote(
 
   if (auth.response) {
     return auth.response;
+  }
+
+  const archivedBlock = await rejectIfGeneratedScheduleArchived(
+    env,
+    auth.admin!.organizationId,
+    generatedScheduleId
+  );
+
+  if (archivedBlock) {
+    return archivedBlock;
   }
 
   let body: unknown;
@@ -936,6 +1023,16 @@ async function deleteGeneratedOccurrenceNoteRoute(
 
   if (auth.response) {
     return auth.response;
+  }
+
+  const archivedBlock = await rejectIfGeneratedScheduleArchived(
+    env,
+    auth.admin!.organizationId,
+    generatedScheduleId
+  );
+
+  if (archivedBlock) {
+    return archivedBlock;
   }
 
   try {
@@ -1058,6 +1155,16 @@ async function postGeneratedOccurrenceResource(
     return auth.response;
   }
 
+  const archivedBlock = await rejectIfGeneratedScheduleArchived(
+    env,
+    auth.admin!.organizationId,
+    generatedScheduleId
+  );
+
+  if (archivedBlock) {
+    return archivedBlock;
+  }
+
   let formData: FormData;
 
   try {
@@ -1137,6 +1244,16 @@ async function patchGeneratedOccurrenceResource(
 
   if (auth.response) {
     return auth.response;
+  }
+
+  const archivedBlock = await rejectIfGeneratedScheduleArchived(
+    env,
+    auth.admin!.organizationId,
+    generatedScheduleId
+  );
+
+  if (archivedBlock) {
+    return archivedBlock;
   }
 
   let body: unknown;
@@ -1251,6 +1368,16 @@ async function deleteGeneratedOccurrenceResourceRoute(
 
   if (auth.response) {
     return auth.response;
+  }
+
+  const archivedBlock = await rejectIfGeneratedScheduleArchived(
+    env,
+    auth.admin!.organizationId,
+    generatedScheduleId
+  );
+
+  if (archivedBlock) {
+    return archivedBlock;
   }
 
   try {
@@ -1401,6 +1528,16 @@ async function patchGeneratedOccurrence(
     return auth.response;
   }
 
+  const archivedBlock = await rejectIfGeneratedScheduleArchived(
+    env,
+    auth.admin!.organizationId,
+    generatedScheduleId
+  );
+
+  if (archivedBlock) {
+    return archivedBlock;
+  }
+
   let body: unknown;
 
   try {
@@ -1500,6 +1637,16 @@ async function postOccurrenceAssignment(
 
   if (auth.response) {
     return auth.response;
+  }
+
+  const archivedBlock = await rejectIfGeneratedScheduleArchived(
+    env,
+    auth.admin!.organizationId,
+    generatedScheduleId
+  );
+
+  if (archivedBlock) {
+    return archivedBlock;
   }
 
   let body: unknown;
@@ -1614,6 +1761,16 @@ async function deleteOccurrenceAssignmentRoute(
 
   if (auth.response) {
     return auth.response;
+  }
+
+  const archivedBlock = await rejectIfGeneratedScheduleArchived(
+    env,
+    auth.admin!.organizationId,
+    generatedScheduleId
+  );
+
+  if (archivedBlock) {
+    return archivedBlock;
   }
 
   try {
