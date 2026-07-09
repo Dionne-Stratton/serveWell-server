@@ -501,15 +501,6 @@ export async function updateAdminScheduleTemplate(
   return getAdminScheduleDetail(env, organizationId, scheduleId);
 }
 
-export async function updateAdminScheduleName(
-  env: Env,
-  organizationId: number,
-  scheduleId: number,
-  name: string
-): Promise<AdminScheduleDetail | null> {
-  return updateAdminScheduleTemplate(env, organizationId, scheduleId, { name });
-}
-
 export type ReplaceScheduleServingAreasResult =
   | { status: "ok"; detail: AdminScheduleDetail }
   | { status: "not_found" }

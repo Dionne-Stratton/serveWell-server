@@ -23,10 +23,6 @@ export const volunteeringFieldKeys = [
 
 export type VolunteeringFieldKey = (typeof volunteeringFieldKeys)[number];
 
-export interface VolunteeringFieldIds {
-  [key: string]: string;
-}
-
 export interface PlanningCenterVolunteeringSetupState {
   status: "ready" | "error";
   tabId?: string;

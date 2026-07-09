@@ -9,22 +9,6 @@ export interface OccurrenceResourceDownloadTokenPayload {
   exp: number;
 }
 
-export async function signOccurrenceResourceDownloadToken(
-  env: Env,
-  input: { resourceId: number; submissionId: number }
-): Promise<string> {
-  const payload: OccurrenceResourceDownloadTokenPayload = {
-    resourceId: input.resourceId,
-    submissionId: input.submissionId,
-    exp: Date.now() + RESOURCE_DOWNLOAD_TTL_MS
-  };
-
-  const encoded = base64UrlEncodeJson(payload);
-  const signature = await hmacSha256(encoded, getJwtSecret(env));
-
-  return `${encoded}.${signature}`;
-}
-
 export async function verifyOccurrenceResourceDownloadToken(
   env: Env,
   token: string

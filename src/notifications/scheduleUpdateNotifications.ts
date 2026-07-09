@@ -529,5 +529,3 @@ export async function sendConsolidatedScheduleVolunteerUpdates(
 
   return { status: "ok", summary };
 }
-
-export { listPriorScheduleAssignmentsForSubmission };

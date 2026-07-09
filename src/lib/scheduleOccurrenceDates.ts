@@ -124,7 +124,3 @@ export function listOccurrenceDatesForDayOfWeek(
 
   return dates;
 }
-
-export function formatGeneratedScheduleName(templateName: string): string {
-  return templateName.trim();
-}

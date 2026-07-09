@@ -20,10 +20,6 @@ export function normalizeSubmissionStatus(status: string): string {
   return status;
 }
 
-export function isLegacyRequirementsPendingStatus(status: string): boolean {
-  return (LEGACY_REQUIREMENTS_PENDING as readonly string[]).includes(status);
-}
-
 export function requirementsPendingStatusFilterValues(): string[] {
   return [REQUIREMENTS_PENDING_STATUS, ...LEGACY_REQUIREMENTS_PENDING];
 }

@@ -132,23 +132,6 @@ export function validateScheduleTemplatePatch(
   return { name, scheduleType };
 }
 
-/** @deprecated use validateScheduleTemplatePatch */
-export function validateScheduleNamePatch(
-  body: unknown
-): { name?: string; error?: string } {
-  const result = validateScheduleTemplatePatch(body);
-
-  if (result.error) {
-    return { error: result.error };
-  }
-
-  if (!result.name) {
-    return { error: "Schedule name is required." };
-  }
-
-  return { name: result.name };
-}
-
 export function validateScheduleServingAreasUpdate(
   body: unknown
 ): { servingAreas?: CreateScheduleServingAreaInput[]; error?: string } {

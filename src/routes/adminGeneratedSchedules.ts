@@ -32,6 +32,7 @@ import {
   loadAssignmentRemovalSnapshot,
   loadOccurrenceNoteSnapshot,
   loadOccurrenceResourceSnapshot,
+  listPriorScheduleAssignmentsForSubmission,
   resourceDisplayLabel,
   scopeWithDisplayName
 } from "../db/generatedScheduleUpdateNotify";
@@ -39,7 +40,6 @@ import { autoAssignGeneratedSchedule } from "../scheduling/autoAssignGeneratedSc
 import { badRequest, json, methodNotAllowed, notFound, serverError } from "../http/responses";
 import { sendGeneratedSchedulePublicationEmails } from "../notifications/schedulePublicationEmails";
 import {
-  listPriorScheduleAssignmentsForSubmission,
   queueScheduleAssignmentAdded,
   queueScheduleAssignmentRemoved,
   queueScheduleContentChanges,

@@ -211,22 +211,3 @@ export async function revokeAdminInvite(
 
   return (result.meta.changes ?? 0) > 0;
 }
-
-export async function revokePendingInvitesForEmailInOrg(
-  env: Env,
-  organizationId: number,
-  email: string
-): Promise<void> {
-  await env.DB.prepare(
-    `
-    UPDATE admin_invites
-    SET revoked_at = CURRENT_TIMESTAMP
-    WHERE organization_id = ?
-      AND lower(email) = lower(?)
-      AND accepted_at IS NULL
-      AND revoked_at IS NULL
-    `
-  )
-    .bind(organizationId, email)
-    .run();
-}

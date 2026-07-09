@@ -6,10 +6,6 @@ export function isRecruitmentStatus(value: unknown): value is RecruitmentStatus 
   return typeof value === "string" && recruitmentStatuses.includes(value as RecruitmentStatus);
 }
 
-export function isPublicRecruitmentStatus(status: string): boolean {
-  return status === "open" || status === "needed" || status === "urgent";
-}
-
 export function recruitmentStatusToIsActive(status: RecruitmentStatus): boolean {
   return status !== "closed";
 }

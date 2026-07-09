@@ -397,35 +397,3 @@ export async function deleteAdminRequirement(
 
   return (result.meta.changes ?? 0) > 0;
 }
-
-export async function getAdminRequirementById(
-  env: Env,
-  requirementId: number,
-  organizationId: number
-): Promise<AdminRequirementRecord | null> {
-  const row = await env.DB.prepare(
-    `
-    SELECT
-      id,
-      organization_id,
-      form_id,
-      serving_area_id,
-      requirement_type,
-      label,
-      description,
-      day_of_week,
-      start_time,
-      end_time,
-      is_mandatory,
-      requires_confirmation,
-      sort_order
-    FROM serving_area_requirements
-    WHERE id = ? AND organization_id = ?
-    LIMIT 1
-    `
-  )
-    .bind(requirementId, organizationId)
-    .first<RequirementRow>();
-
-  return row ? mapRow(row) : null;
-}

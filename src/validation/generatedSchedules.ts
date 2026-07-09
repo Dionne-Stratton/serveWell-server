@@ -5,14 +5,6 @@ import {
 } from "../lib/scheduleOccurrenceDates";
 import type { ScheduleType } from "./schedules";
 
-export interface CreateGeneratedScheduleInput {
-  scheduleTemplateId: number;
-  month?: number;
-  year?: number;
-  startDate?: string;
-  endDate?: string;
-}
-
 export interface ValidatedGeneratedScheduleRange {
   scheduleTemplateId: number;
   name: string;

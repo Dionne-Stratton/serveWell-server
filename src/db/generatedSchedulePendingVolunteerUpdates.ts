@@ -120,22 +120,3 @@ export async function clearPendingVolunteerUpdatesForSchedule(
     .bind(generatedScheduleId, organizationId)
     .run();
 }
-
-export async function scheduleHasUnsentVolunteerUpdates(
-  env: Env,
-  organizationId: number,
-  generatedScheduleId: number
-): Promise<boolean> {
-  const row = await env.DB.prepare(
-    `
-    SELECT has_unsent_volunteer_updates
-    FROM generated_schedules
-    WHERE id = ? AND organization_id = ?
-    LIMIT 1
-    `
-  )
-    .bind(generatedScheduleId, organizationId)
-    .first<{ has_unsent_volunteer_updates: number }>();
-
-  return (row?.has_unsent_volunteer_updates ?? 0) === 1;
-}

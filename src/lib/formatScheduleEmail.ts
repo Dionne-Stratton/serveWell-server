@@ -39,17 +39,6 @@ export function formatScheduleEmailCompactDate(isoDate: string): string {
   });
 }
 
-export function formatScheduleEmailDateRange(startDate: string, endDate: string): string {
-  const start = formatScheduleEmailDate(startDate);
-  const end = formatScheduleEmailDate(endDate);
-
-  if (startDate === endDate) {
-    return start;
-  }
-
-  return `${start} – ${end}`;
-}
-
 export function formatScheduleEmailTime(time: string): string {
   const match = time.trim().match(/^(\d{1,2}):(\d{2})/);
 
