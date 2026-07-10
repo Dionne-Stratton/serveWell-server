@@ -241,6 +241,7 @@ Dated schedules created from templates. **Create** runs auto-assignment (draft s
 |--------|------|--------|
 | `GET` | `/api/admin/generated-schedules` | List (includes `hasUnsentVolunteerUpdates`) |
 | `POST` | `/api/admin/generated-schedules` | Create draft + auto-assign; returns `autoAssignSummary` |
+| `POST` | `/api/admin/generated-schedules/:id/auto-assign` | Draft only: clear assignments + rerun auto-assign; returns `autoAssignSummary` |
 | `GET` | `/api/admin/generated-schedules/:id` | Detail with occurrences, assignments, counts |
 | `DELETE` | `/api/admin/generated-schedules/:id` | Delete generated schedule |
 | `POST` | `/api/admin/generated-schedules/:id/publish` | Publish + publication emails |

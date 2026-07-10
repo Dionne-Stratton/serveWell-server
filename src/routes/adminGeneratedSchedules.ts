@@ -37,7 +37,7 @@ import {
   resourceDisplayLabel,
   scopeWithDisplayName
 } from "../db/generatedScheduleUpdateNotify";
-import { autoAssignGeneratedSchedule } from "../scheduling/autoAssignGeneratedSchedule";
+import { autoAssignGeneratedSchedule, redoAutoAssignGeneratedSchedule } from "../scheduling/autoAssignGeneratedSchedule";
 import { badRequest, json, methodNotAllowed, notFound, serverError } from "../http/responses";
 import { rejectIfGeneratedScheduleArchived } from "../lib/generatedScheduleEditGuard";
 import { sendGeneratedSchedulePublicationEmails } from "../notifications/schedulePublicationEmails";
@@ -389,6 +389,22 @@ export async function tryAdminGeneratedSchedulesRoute(
     return methodNotAllowed();
   }
 
+  const autoAssignMatch = pathname.match(/^\/api\/admin\/generated-schedules\/(\d+)\/auto-assign$/);
+
+  if (autoAssignMatch) {
+    const generatedScheduleId = Number(autoAssignMatch[1]);
+
+    if (!Number.isInteger(generatedScheduleId) || generatedScheduleId < 1) {
+      return notFound();
+    }
+
+    if (request.method === "POST") {
+      return postAutoAssignGenerated(request, env, generatedScheduleId);
+    }
+
+    return methodNotAllowed();
+  }
+
   const archiveMatch = pathname.match(/^\/api\/admin\/generated-schedules\/(\d+)\/archive$/);
 
   if (archiveMatch) {
@@ -531,6 +547,79 @@ async function postPublishGenerated(
   } catch (error) {
     console.error("Failed to publish generated schedule", error);
     return serverError("Unable to publish schedule.");
+  }
+}
+
+async function postAutoAssignGenerated(
+  request: Request,
+  env: Env,
+  generatedScheduleId: number
+): Promise<Response> {
+  const auth = await requireAdmin(request, env);
+
+  if (auth.response) {
+    return auth.response;
+  }
+
+  const archivedBlock = await rejectIfGeneratedScheduleArchived(
+    env,
+    auth.admin!.organizationId,
+    generatedScheduleId
+  );
+
+  if (archivedBlock) {
+    return archivedBlock;
+  }
+
+  try {
+    const row = await env.DB.prepare(
+      `
+      SELECT status
+      FROM generated_schedules
+      WHERE id = ? AND organization_id = ?
+      LIMIT 1
+      `
+    )
+      .bind(generatedScheduleId, auth.admin!.organizationId)
+      .first<{ status: string }>();
+
+    if (!row) {
+      return notFound();
+    }
+
+    if (row.status !== "draft") {
+      return badRequest(
+        "Only draft schedules can be auto-filled again.",
+        "SCHEDULE_NOT_DRAFT"
+      );
+    }
+
+    const autoAssignSummary = await redoAutoAssignGeneratedSchedule(
+      env,
+      auth.admin!.organizationId,
+      generatedScheduleId
+    );
+
+    const detail = await getGeneratedScheduleDetail(
+      env,
+      auth.admin!.organizationId,
+      generatedScheduleId
+    );
+
+    if (!detail) {
+      return notFound();
+    }
+
+    return json({
+      success: true,
+      data: {
+        generatedSchedule: detail,
+        autoAssignSummary
+      }
+    });
+  } catch (error) {
+    console.error("Failed to re-run auto-assign on generated schedule", error);
+    return serverError("Unable to auto-fill volunteers.");
   }
 }
 

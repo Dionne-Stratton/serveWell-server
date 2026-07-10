@@ -236,6 +236,50 @@ export async function autoAssignGeneratedSchedule(
   };
 }
 
+export async function clearGeneratedScheduleVolunteerAssignments(
+  env: Env,
+  organizationId: number,
+  generatedScheduleId: number
+): Promise<void> {
+  await env.DB.batch([
+    env.DB.prepare(
+      `
+      DELETE FROM generated_schedule_occurrence_assignments
+      WHERE organization_id = ?
+        AND occurrence_id IN (
+          SELECT id
+          FROM generated_schedule_occurrences
+          WHERE generated_schedule_id = ?
+            AND organization_id = ?
+        )
+      `
+    ).bind(organizationId, generatedScheduleId, organizationId),
+    env.DB.prepare(
+      `
+      UPDATE generated_schedule_occurrence_requirements
+      SET assigned_count = 0
+      WHERE organization_id = ?
+        AND occurrence_id IN (
+          SELECT id
+          FROM generated_schedule_occurrences
+          WHERE generated_schedule_id = ?
+            AND organization_id = ?
+        )
+      `
+    ).bind(organizationId, generatedScheduleId, organizationId)
+  ]);
+}
+
+/** Removes all volunteer assignments on this schedule, then runs auto-assign from scratch. */
+export async function redoAutoAssignGeneratedSchedule(
+  env: Env,
+  organizationId: number,
+  generatedScheduleId: number
+): Promise<GeneratedScheduleAutoAssignSummary> {
+  await clearGeneratedScheduleVolunteerAssignments(env, organizationId, generatedScheduleId);
+  return autoAssignGeneratedSchedule(env, organizationId, generatedScheduleId);
+}
+
 function emptySummary(): GeneratedScheduleAutoAssignSummary {
   return {
     slotsNeeded: 0,
