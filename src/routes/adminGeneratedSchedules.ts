@@ -1673,6 +1673,9 @@ async function postOccurrenceAssignment(
     return badRequest("Volunteer is required.");
   }
 
+  const confirmFrequencyOverride = record.confirmFrequencyOverride === true;
+  const confirmMultipleRolesOnOccurrence = record.confirmMultipleRolesOnOccurrence === true;
+
   try {
     const priorAssignments = await listPriorScheduleAssignmentsForSubmission(
       env,
@@ -1687,7 +1690,8 @@ async function postOccurrenceAssignment(
       generatedScheduleId,
       occurrenceId,
       requirementId,
-      submissionId
+      submissionId,
+      { confirmFrequencyOverride, confirmMultipleRolesOnOccurrence }
     );
 
     if (!result.ok) {
@@ -1701,6 +1705,24 @@ async function postOccurrenceAssignment(
 
       if (result.code === "DUPLICATE") {
         return badRequest("That volunteer is already assigned to this serving area.");
+      }
+
+      if (result.code === "BLACKOUT_DATE") {
+        return badRequest(
+          "That volunteer marked this event date as unavailable. Choose another volunteer or change the event date."
+        );
+      }
+
+      if (result.code === "MULTIPLE_ROLES_ON_OCCURRENCE_REQUIRES_CONFIRMATION") {
+        return badRequest(
+          "This volunteer is already assigned to another role on this event. Confirm the override to assign them to multiple roles."
+        );
+      }
+
+      if (result.code === "FREQUENCY_LIMIT_REQUIRES_CONFIRMATION") {
+        return badRequest(
+          "This assignment would exceed the volunteer's stated serving frequency. Confirm the override to assign them anyway."
+        );
       }
 
       if (result.code === "INELIGIBLE") {

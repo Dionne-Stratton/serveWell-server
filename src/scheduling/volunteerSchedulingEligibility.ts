@@ -110,6 +110,43 @@ export function volunteerPassesHardSchedulingFilters(
   return true;
 }
 
+/** True if one more assignment would meet or exceed the volunteer's stated frequency caps. */
+export function volunteerWouldExceedFrequencyLimits(
+  profile: VolunteerSchedulingProfile,
+  context: Pick<
+    RequirementAssignContext,
+    | "servingAreaId"
+    | "scheduleStartDate"
+    | "scheduleEndDate"
+    | "assignmentsInSchedule"
+    | "assignmentsInMonth"
+  >
+): boolean {
+  const frequency = effectiveFrequencyForServingArea(
+    profile,
+    context.servingAreaId,
+    profile.overallFrequency
+  );
+
+  const maxInSchedule = maxAssignmentsInScheduleForFrequency(
+    frequency,
+    context.scheduleStartDate,
+    context.scheduleEndDate
+  );
+
+  if (context.assignmentsInSchedule >= maxInSchedule) {
+    return true;
+  }
+
+  const maxPerMonth = maxAssignmentsPerMonthForFrequency(frequency);
+
+  if (context.assignmentsInMonth >= maxPerMonth) {
+    return true;
+  }
+
+  return false;
+}
+
 export function scoreVolunteerForRequirement(
   profile: VolunteerSchedulingProfile,
   context: RequirementAssignContext

@@ -1,5 +1,15 @@
 import type { Env } from "../types";
 import { schedulingReadyStatusSqlInList } from "../lib/submissionStatus";
+import { volunteerWouldExceedFrequencyLimits } from "../scheduling/volunteerSchedulingEligibility";
+import {
+  countMonthAssignmentsInScheduleBySubmission,
+  countScheduleAssignmentsBySubmission,
+  loadOccurrenceRequirementSchedulingContext,
+  loadOtherOccurrenceRoleNamesBySubmission,
+  loadSchedulingProfilesBySubmissionId,
+  volunteerHasOtherRoleOnOccurrence,
+  volunteerIsBlackoutOnOccurrence
+} from "../scheduling/manualOccurrenceAssignmentScheduling";
 
 export interface OccurrenceVolunteerAssignment {
   id: number;
@@ -14,6 +24,9 @@ export interface EligibleOccurrenceVolunteer {
   firstName: string;
   lastName: string;
   displayName: string;
+  frequencyLimitWarning?: boolean;
+  multipleRolesOnOccurrenceWarning?: boolean;
+  otherRolesOnOccurrence?: string[];
 }
 
 interface RequirementContext {
@@ -153,7 +166,7 @@ export async function listEligibleVolunteersForRequirement(
   occurrenceId: number,
   requirementId: number
 ): Promise<EligibleOccurrenceVolunteer[] | null> {
-  const context = await getRequirementContext(
+  const schedulingContext = await loadOccurrenceRequirementSchedulingContext(
     env,
     organizationId,
     generatedScheduleId,
@@ -161,7 +174,11 @@ export async function listEligibleVolunteersForRequirement(
     requirementId
   );
 
-  if (!context?.scheduleServingAreaId) {
+  if (!schedulingContext) {
+    return null;
+  }
+
+  if (!schedulingContext.scheduleServingAreaId || !schedulingContext.servingAreaId) {
     return [];
   }
 
@@ -189,7 +206,7 @@ export async function listEligibleVolunteersForRequirement(
     `
   )
     .bind(
-      context.scheduleServingAreaId,
+      schedulingContext.scheduleServingAreaId,
       organizationId,
       organizationId,
       requirementId
@@ -200,12 +217,72 @@ export async function listEligibleVolunteersForRequirement(
       last_name: string;
     }>();
 
-  return (result.results ?? []).map((row) => ({
-    submissionId: row.submission_id,
-    firstName: row.first_name,
-    lastName: row.last_name,
-    displayName: `${row.first_name} ${row.last_name}`.trim()
-  }));
+  const rows = result.results ?? [];
+
+  if (rows.length === 0) {
+    return [];
+  }
+
+  const submissionIds = rows.map((row) => row.submission_id);
+  const profiles = await loadSchedulingProfilesBySubmissionId(env, organizationId, submissionIds);
+  const assignmentsInSchedule = await countScheduleAssignmentsBySubmission(
+    env,
+    generatedScheduleId,
+    submissionIds
+  );
+  const assignmentsInMonth = await countMonthAssignmentsInScheduleBySubmission(
+    env,
+    generatedScheduleId,
+    schedulingContext.occurrenceDate,
+    submissionIds
+  );
+  const otherRolesBySubmission = await loadOtherOccurrenceRoleNamesBySubmission(
+    env,
+    schedulingContext.occurrenceId,
+    schedulingContext.requirementId,
+    submissionIds
+  );
+
+  const volunteers: EligibleOccurrenceVolunteer[] = [];
+
+  for (const row of rows) {
+    const profile = profiles.get(row.submission_id);
+
+    if (!profile) {
+      continue;
+    }
+
+    if (volunteerIsBlackoutOnOccurrence(profile, schedulingContext.occurrenceDate)) {
+      continue;
+    }
+
+    const frequencyLimitWarning = volunteerWouldExceedFrequencyLimits(profile, {
+      servingAreaId: schedulingContext.servingAreaId,
+      scheduleStartDate: schedulingContext.scheduleStartDate,
+      scheduleEndDate: schedulingContext.scheduleEndDate,
+      assignmentsInSchedule: assignmentsInSchedule.get(row.submission_id) ?? 0,
+      assignmentsInMonth: assignmentsInMonth.get(row.submission_id) ?? 0
+    });
+
+    const otherRoles = otherRolesBySubmission.get(row.submission_id) ?? [];
+    const multipleRolesOnOccurrenceWarning = otherRoles.length > 0;
+
+    volunteers.push({
+      submissionId: row.submission_id,
+      firstName: row.first_name,
+      lastName: row.last_name,
+      displayName: `${row.first_name} ${row.last_name}`.trim(),
+      ...(frequencyLimitWarning ? { frequencyLimitWarning: true } : {}),
+      ...(multipleRolesOnOccurrenceWarning
+        ? {
+            multipleRolesOnOccurrenceWarning: true,
+            otherRolesOnOccurrence: otherRoles
+          }
+        : {})
+    });
+  }
+
+  return volunteers;
 }
 
 export type CreateOccurrenceAssignmentResult =
@@ -217,8 +294,16 @@ export type CreateOccurrenceAssignmentResult =
         | "FULL"
         | "INELIGIBLE"
         | "DUPLICATE"
-        | "INVALID_BODY";
+        | "INVALID_BODY"
+        | "BLACKOUT_DATE"
+        | "FREQUENCY_LIMIT_REQUIRES_CONFIRMATION"
+        | "MULTIPLE_ROLES_ON_OCCURRENCE_REQUIRES_CONFIRMATION";
     };
+
+export interface CreateOccurrenceAssignmentOptions {
+  confirmFrequencyOverride?: boolean;
+  confirmMultipleRolesOnOccurrence?: boolean;
+}
 
 export async function createOccurrenceAssignment(
   env: Env,
@@ -226,7 +311,8 @@ export async function createOccurrenceAssignment(
   generatedScheduleId: number,
   occurrenceId: number,
   requirementId: number,
-  submissionId: number
+  submissionId: number,
+  options: CreateOccurrenceAssignmentOptions = {}
 ): Promise<CreateOccurrenceAssignmentResult> {
   if (!Number.isInteger(submissionId) || submissionId < 1) {
     return { ok: false, code: "INVALID_BODY" };
@@ -296,6 +382,64 @@ export async function createOccurrenceAssignment(
 
   if (!eligible) {
     return { ok: false, code: "INELIGIBLE" };
+  }
+
+  const schedulingContext = await loadOccurrenceRequirementSchedulingContext(
+    env,
+    organizationId,
+    generatedScheduleId,
+    occurrenceId,
+    requirementId
+  );
+
+  if (!schedulingContext?.servingAreaId) {
+    return { ok: false, code: "INELIGIBLE" };
+  }
+
+  const profiles = await loadSchedulingProfilesBySubmissionId(env, organizationId, [submissionId]);
+  const profile = profiles.get(submissionId);
+
+  if (!profile) {
+    return { ok: false, code: "INELIGIBLE" };
+  }
+
+  if (volunteerIsBlackoutOnOccurrence(profile, schedulingContext.occurrenceDate)) {
+    return { ok: false, code: "BLACKOUT_DATE" };
+  }
+
+  const hasOtherRoleOnOccurrence = await volunteerHasOtherRoleOnOccurrence(
+    env,
+    occurrenceId,
+    requirementId,
+    submissionId
+  );
+
+  if (hasOtherRoleOnOccurrence && !options.confirmMultipleRolesOnOccurrence) {
+    return { ok: false, code: "MULTIPLE_ROLES_ON_OCCURRENCE_REQUIRES_CONFIRMATION" };
+  }
+
+  const assignmentsInSchedule = await countScheduleAssignmentsBySubmission(
+    env,
+    generatedScheduleId,
+    [submissionId]
+  );
+  const assignmentsInMonth = await countMonthAssignmentsInScheduleBySubmission(
+    env,
+    generatedScheduleId,
+    schedulingContext.occurrenceDate,
+    [submissionId]
+  );
+
+  const exceedsFrequency = volunteerWouldExceedFrequencyLimits(profile, {
+    servingAreaId: schedulingContext.servingAreaId,
+    scheduleStartDate: schedulingContext.scheduleStartDate,
+    scheduleEndDate: schedulingContext.scheduleEndDate,
+    assignmentsInSchedule: assignmentsInSchedule.get(submissionId) ?? 0,
+    assignmentsInMonth: assignmentsInMonth.get(submissionId) ?? 0
+  });
+
+  if (exceedsFrequency && !options.confirmFrequencyOverride) {
+    return { ok: false, code: "FREQUENCY_LIMIT_REQUIRES_CONFIRMATION" };
   }
 
   await env.DB.prepare(
