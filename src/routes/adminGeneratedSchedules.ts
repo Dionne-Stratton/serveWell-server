@@ -1802,6 +1802,12 @@ async function postOccurrenceAssignment(
         );
       }
 
+      if (result.code === "UNAVAILABLE_FOR_RHYTHM_DAY") {
+        return badRequest(
+          "That volunteer is not available on this event's day of the week based on their intake form."
+        );
+      }
+
       if (result.code === "MULTIPLE_ROLES_ON_OCCURRENCE_REQUIRES_CONFIRMATION") {
         return badRequest(
           "This volunteer is already assigned to another role on this event. Confirm the override to assign them to multiple roles."

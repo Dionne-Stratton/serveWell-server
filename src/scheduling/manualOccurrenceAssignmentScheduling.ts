@@ -1,4 +1,5 @@
 import type { Env } from "../types";
+import { volunteerHasAvailabilityForRhythm } from "./availabilityForRhythm";
 import { calendarMonthKey } from "../scheduling/volunteerSchedulingEligibility";
 import {
   isDateInBlackout,
@@ -14,6 +15,7 @@ export interface OccurrenceRequirementSchedulingContext {
   scheduleServingAreaId: number | null;
   servingAreaId: number | null;
   occurrenceDate: string;
+  rhythmDayOfWeek: string;
   scheduleStartDate: string;
   scheduleEndDate: string;
   neededCount: number;
@@ -37,12 +39,14 @@ export async function loadOccurrenceRequirementSchedulingContext(
       greq.assigned_count,
       gso.generated_schedule_id,
       gso.occurrence_date,
+      sr.day_of_week AS rhythm_day_of_week,
       gs.start_date AS schedule_start_date,
       gs.end_date AS schedule_end_date,
       ssa.serving_area_id
     FROM generated_schedule_occurrence_requirements greq
     INNER JOIN generated_schedule_occurrences gso ON gso.id = greq.occurrence_id
     INNER JOIN generated_schedules gs ON gs.id = gso.generated_schedule_id
+    INNER JOIN schedule_rhythms sr ON sr.id = gso.template_rhythm_id
     LEFT JOIN schedule_serving_areas ssa ON ssa.id = greq.schedule_serving_area_id
     WHERE greq.id = ?
       AND greq.occurrence_id = ?
@@ -69,6 +73,7 @@ export async function loadOccurrenceRequirementSchedulingContext(
       assigned_count: number;
       generated_schedule_id: number;
       occurrence_date: string;
+      rhythm_day_of_week: string;
       schedule_start_date: string;
       schedule_end_date: string;
       serving_area_id: number | null;
@@ -86,6 +91,7 @@ export async function loadOccurrenceRequirementSchedulingContext(
     scheduleServingAreaId: row.schedule_serving_area_id,
     servingAreaId: row.serving_area_id,
     occurrenceDate: row.occurrence_date,
+    rhythmDayOfWeek: row.rhythm_day_of_week,
     scheduleStartDate: row.schedule_start_date,
     scheduleEndDate: row.schedule_end_date,
     neededCount: row.needed_count,
@@ -184,6 +190,13 @@ export function volunteerIsBlackoutOnOccurrence(
   occurrenceDate: string
 ): boolean {
   return isDateInBlackout(profile.blackoutRanges, occurrenceDate);
+}
+
+export function volunteerIsAvailableForOccurrenceRhythm(
+  profile: VolunteerSchedulingProfile,
+  rhythmDayOfWeek: string
+): boolean {
+  return volunteerHasAvailabilityForRhythm(profile.availabilityKeys, rhythmDayOfWeek);
 }
 
 /** Other staffing rows on the same event (not the current requirement). */

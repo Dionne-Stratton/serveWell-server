@@ -8,6 +8,7 @@ import {
   loadOtherOccurrenceRoleNamesBySubmission,
   loadSchedulingProfilesBySubmissionId,
   volunteerHasOtherRoleOnOccurrence,
+  volunteerIsAvailableForOccurrenceRhythm,
   volunteerIsBlackoutOnOccurrence
 } from "../scheduling/manualOccurrenceAssignmentScheduling";
 
@@ -256,6 +257,10 @@ export async function listEligibleVolunteersForRequirement(
       continue;
     }
 
+    if (!volunteerIsAvailableForOccurrenceRhythm(profile, schedulingContext.rhythmDayOfWeek)) {
+      continue;
+    }
+
     const frequencyLimitWarning = volunteerWouldExceedFrequencyLimits(profile, {
       servingAreaId: schedulingContext.servingAreaId,
       scheduleStartDate: schedulingContext.scheduleStartDate,
@@ -296,6 +301,7 @@ export type CreateOccurrenceAssignmentResult =
         | "DUPLICATE"
         | "INVALID_BODY"
         | "BLACKOUT_DATE"
+        | "UNAVAILABLE_FOR_RHYTHM_DAY"
         | "FREQUENCY_LIMIT_REQUIRES_CONFIRMATION"
         | "MULTIPLE_ROLES_ON_OCCURRENCE_REQUIRES_CONFIRMATION";
     };
@@ -405,6 +411,10 @@ export async function createOccurrenceAssignment(
 
   if (volunteerIsBlackoutOnOccurrence(profile, schedulingContext.occurrenceDate)) {
     return { ok: false, code: "BLACKOUT_DATE" };
+  }
+
+  if (!volunteerIsAvailableForOccurrenceRhythm(profile, schedulingContext.rhythmDayOfWeek)) {
+    return { ok: false, code: "UNAVAILABLE_FOR_RHYTHM_DAY" };
   }
 
   const hasOtherRoleOnOccurrence = await volunteerHasOtherRoleOnOccurrence(
