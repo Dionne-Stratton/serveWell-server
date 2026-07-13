@@ -36,7 +36,7 @@ For product direction and request/response shapes, see the sibling docs in the p
    cp .dev.vars.example .dev.vars
    ```
 
-   Set `JWT_SECRET` to a long random string for local use. `FRONTEND_ORIGIN` should match your Vite dev server (default `http://localhost:5173`).
+   Set `JWT_SECRET` to a long random string for local use. `FRONTEND_ORIGIN` should match your Vite dev server (default `http://localhost:5173`). Production sets `FRONTEND_ORIGIN=https://simplyservewell.com` in `wrangler.toml` (invite, reset, OAuth, and notification links).
 
    Optional (Planning Center OAuth): set `PLANNING_CENTER_CLIENT_ID`, `PLANNING_CENTER_CLIENT_SECRET`, and `PLANNING_CENTER_REDIRECT_URI_LOCAL` (see `.dev.vars.example`). Without these, connect/disconnect routes return errors when invoked.
 

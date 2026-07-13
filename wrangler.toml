@@ -4,6 +4,7 @@ compatibility_date = "2026-05-19"
 
 [vars]
 ENVIRONMENT = "production"
+FRONTEND_ORIGIN = "https://simplyservewell.com"
 PUBLIC_API_ORIGIN = "https://servewell-server.dionnestratton.workers.dev"
 
 [[d1_databases]]

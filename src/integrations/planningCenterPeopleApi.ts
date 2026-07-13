@@ -1,5 +1,5 @@
 const PEOPLE_API_BASE = "https://api.planningcenteronline.com/people/v2";
-const USER_AGENT = "ServeWell Planning Center Integration (support@servewell.app)";
+const USER_AGENT = "ServeWell Planning Center Integration (support@simplyservewell.com)";
 
 export interface JsonApiResource<TAttributes = Record<string, unknown>> {
   type: string;

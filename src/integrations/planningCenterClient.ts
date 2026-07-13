@@ -6,7 +6,7 @@ const TOKEN_URL = "https://api.planningcenteronline.com/oauth/token";
 const REVOKE_URL = "https://api.planningcenteronline.com/oauth/revoke";
 const USERINFO_URL = "https://api.planningcenteronline.com/oauth/userinfo";
 const DEFAULT_SCOPE = "people openid";
-const USER_AGENT = "ServeWell Planning Center Integration (support@servewell.app)";
+const USER_AGENT = "ServeWell Planning Center Integration (support@simplyservewell.com)";
 
 export interface PlanningCenterTokenResponse {
   access_token: string;
