@@ -874,3 +874,136 @@ export async function deleteAdminSchedule(
 
   return Boolean(result.meta.changes);
 }
+
+export type DuplicateAdminScheduleResult =
+  | { ok: true; schedule: AdminScheduleDetail }
+  | { ok: false; code: "NOT_FOUND" | "INVALID_NAME" };
+
+export async function duplicateAdminSchedule(
+  env: Env,
+  organizationId: number,
+  scheduleId: number,
+  name: string
+): Promise<DuplicateAdminScheduleResult> {
+  const trimmedName = name.trim();
+
+  if (!trimmedName || trimmedName.length > 120) {
+    return { ok: false, code: "INVALID_NAME" };
+  }
+
+  const source = await getAdminScheduleDetail(env, organizationId, scheduleId);
+
+  if (!source) {
+    return { ok: false, code: "NOT_FOUND" };
+  }
+
+  const scheduleInsert = await env.DB.prepare(
+    `
+    INSERT INTO schedules (organization_id, name, schedule_type)
+    VALUES (?, ?, ?)
+    `
+  )
+    .bind(organizationId, trimmedName, source.scheduleType)
+    .run();
+
+  const newScheduleId = scheduleInsert.meta.last_row_id;
+
+  if (!newScheduleId) {
+    throw new Error("Duplicated schedule insert did not return an id.");
+  }
+
+  const servingAreaIdMap = new Map<number, number>();
+
+  for (const area of source.servingAreas) {
+    const insert = await env.DB.prepare(
+      `
+      INSERT INTO schedule_serving_areas (
+        schedule_id,
+        organization_id,
+        serving_area_id,
+        form_id,
+        custom_name,
+        display_name
+      )
+      VALUES (?, ?, ?, ?, ?, ?)
+      `
+    )
+      .bind(
+        newScheduleId,
+        organizationId,
+        area.servingAreaId,
+        area.formId,
+        area.customName,
+        area.displayName
+      )
+      .run();
+
+    const newServingAreaId = insert.meta.last_row_id;
+
+    if (newServingAreaId) {
+      servingAreaIdMap.set(area.id, newServingAreaId);
+    }
+  }
+
+  for (let rhythmIndex = 0; rhythmIndex < source.rhythms.length; rhythmIndex += 1) {
+    const rhythm = source.rhythms[rhythmIndex];
+    const rhythmInsert = await env.DB.prepare(
+      `
+      INSERT INTO schedule_rhythms (
+        schedule_id,
+        organization_id,
+        name,
+        day_of_week,
+        start_time,
+        sort_order
+      )
+      VALUES (?, ?, ?, ?, ?, ?)
+      `
+    )
+      .bind(
+        newScheduleId,
+        organizationId,
+        rhythm.name,
+        rhythm.dayOfWeek,
+        rhythm.startTime,
+        rhythmIndex
+      )
+      .run();
+
+    const newRhythmId = rhythmInsert.meta.last_row_id;
+
+    if (!newRhythmId) {
+      continue;
+    }
+
+    for (const requirement of rhythm.requirements) {
+      const newServingAreaId = servingAreaIdMap.get(requirement.scheduleServingAreaId);
+
+      if (!newServingAreaId) {
+        continue;
+      }
+
+      await env.DB.prepare(
+        `
+        INSERT INTO schedule_rhythm_requirements (
+          rhythm_id,
+          schedule_serving_area_id,
+          organization_id,
+          needed_count
+        )
+        VALUES (?, ?, ?, ?)
+        `
+      )
+        .bind(newRhythmId, newServingAreaId, organizationId, requirement.neededCount)
+        .run();
+    }
+  }
+
+  const schedule = await getAdminScheduleDetail(env, organizationId, newScheduleId);
+
+  if (!schedule) {
+    throw new Error("Duplicated schedule could not be loaded.");
+  }
+
+  return { ok: true, schedule };
+}

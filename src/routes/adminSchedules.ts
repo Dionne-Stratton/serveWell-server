@@ -2,6 +2,7 @@ import { requireAdmin } from "../auth/adminGuard";
 import {
   createAdminSchedule,
   deleteAdminSchedule,
+  duplicateAdminSchedule,
   getAdminScheduleDetail,
   listAdminSchedules,
   listScheduleServingAreaCatalog,
@@ -29,6 +30,22 @@ export async function tryAdminSchedulesRoute(
     }
 
     return getServingAreaOptions(request, env);
+  }
+
+  const duplicateMatch = pathname.match(/^\/api\/admin\/schedules\/(\d+)\/duplicate$/);
+
+  if (duplicateMatch) {
+    const scheduleId = Number(duplicateMatch[1]);
+
+    if (!Number.isInteger(scheduleId) || scheduleId < 1) {
+      return notFound();
+    }
+
+    if (request.method === "POST") {
+      return postDuplicateSchedule(request, env, scheduleId);
+    }
+
+    return methodNotAllowed();
   }
 
   const subResourceMatch = pathname.match(/^\/api\/admin\/schedules\/(\d+)\/(serving-areas|rhythms)$/);
@@ -380,6 +397,64 @@ async function putScheduleRhythms(
   } catch (error) {
     console.error("Failed to update schedule rhythms", error);
     return serverError("Unable to save service times.");
+  }
+}
+
+async function postDuplicateSchedule(
+  request: Request,
+  env: Env,
+  scheduleId: number
+): Promise<Response> {
+  const auth = await requireAdmin(request, env);
+
+  if (auth.response) {
+    return auth.response;
+  }
+
+  let body: unknown;
+
+  try {
+    body = await request.json();
+  } catch {
+    return badRequest("Request body must be valid JSON.", "INVALID_JSON");
+  }
+
+  if (!body || typeof body !== "object") {
+    return badRequest("Request body must be a JSON object.");
+  }
+
+  const name = (body as Record<string, unknown>).name;
+
+  if (typeof name !== "string") {
+    return badRequest("Template name is required.");
+  }
+
+  try {
+    const result = await duplicateAdminSchedule(
+      env,
+      auth.admin!.organizationId,
+      scheduleId,
+      name
+    );
+
+    if (!result.ok) {
+      if (result.code === "NOT_FOUND") {
+        return notFound();
+      }
+
+      return badRequest("Template name is required (120 characters or fewer).");
+    }
+
+    return json(
+      {
+        success: true,
+        data: result.schedule
+      },
+      { status: 201 }
+    );
+  } catch (error) {
+    console.error("Failed to duplicate schedule template", error);
+    return serverError("Unable to duplicate template.");
   }
 }
 
