@@ -1,6 +1,9 @@
 import { hashPassword } from "../auth/passwords";
 import { provisionChurchVolunteerDefaultForm } from "./provisionDefaultForm";
-import type { OrganizationRegistrationInput } from "../validation/organizationRegistration";
+import {
+  validateOrganizationSlugFormat,
+  type OrganizationRegistrationInput
+} from "../validation/organizationRegistration";
 import type { Env } from "../types";
 
 export interface OrganizationProfile {
@@ -29,6 +32,43 @@ export async function isOrganizationSlugTaken(env: Env, slug: string): Promise<b
     .first<{ id: number }>();
 
   return Boolean(row);
+}
+
+export type OrganizationSlugAvailability =
+  | { available: true; slug: string }
+  | {
+      available: false;
+      slug: string | null;
+      reason: "invalid" | "reserved" | "taken";
+      message: string;
+    };
+
+export async function getOrganizationSlugAvailability(
+  env: Env,
+  rawSlug: unknown
+): Promise<OrganizationSlugAvailability> {
+  const format = validateOrganizationSlugFormat(rawSlug);
+
+  if (!format.ok) {
+    return {
+      available: false,
+      slug: typeof rawSlug === "string" ? rawSlug.trim().toLowerCase() || null : null,
+      reason: format.code === "ORGANIZATION_SLUG_RESERVED" ? "reserved" : "invalid",
+      message: format.message
+    };
+  }
+
+  if (await isOrganizationSlugTaken(env, format.slug)) {
+    return {
+      available: false,
+      slug: format.slug,
+      reason: "taken",
+      message:
+        "That URL slug is already taken. Try adding your city or neighborhood (for example, kairos-austin)."
+    };
+  }
+
+  return { available: true, slug: format.slug };
 }
 
 export async function createOrganizationWithAdmin(

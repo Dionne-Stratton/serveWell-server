@@ -62,7 +62,8 @@ export async function notifyAdminsOfNewPublicSubmission(
   const recipients = await listAdminsForSubmissionNotification(
     env,
     context.organizationId,
-    "new_submissions"
+    "new_submissions",
+    context.submissionId
   );
 
   if (recipients.length === 0) {
@@ -112,6 +113,7 @@ export async function notifyAdminsOfReadyToSchedule(
     env,
     context.organizationId,
     "ready_to_schedule",
+    context.submissionId,
     excludeAdminUserId
   );
 

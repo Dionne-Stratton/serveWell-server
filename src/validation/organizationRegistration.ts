@@ -147,6 +147,43 @@ export function validateOrganizationRegistration(body: unknown): RegistrationVal
   };
 }
 
+export type OrganizationSlugFormatResult =
+  | { ok: true; slug: string }
+  | { ok: false; message: string; code: "INVALID_ORGANIZATION_SLUG" | "ORGANIZATION_SLUG_RESERVED" };
+
+/** Validates slug shape and reserved names (does not check if taken). */
+export function validateOrganizationSlugFormat(raw: unknown): OrganizationSlugFormatResult {
+  const organizationSlug = normalizeSlug(raw);
+
+  if (!organizationSlug) {
+    return {
+      ok: false,
+      message:
+        "Organization slug is required. Use lowercase letters, numbers, and hyphens (e.g. grace-church).",
+      code: "INVALID_ORGANIZATION_SLUG"
+    };
+  }
+
+  if (organizationSlug.length < 2 || organizationSlug.length > 48 || !SLUG_PATTERN.test(organizationSlug)) {
+    return {
+      ok: false,
+      message:
+        "Organization slug must be 2–48 characters and use only lowercase letters, numbers, and hyphens.",
+      code: "INVALID_ORGANIZATION_SLUG"
+    };
+  }
+
+  if (RESERVED_ORGANIZATION_SLUGS.has(organizationSlug)) {
+    return {
+      ok: false,
+      message: "That organization URL is not available.",
+      code: "ORGANIZATION_SLUG_RESERVED"
+    };
+  }
+
+  return { ok: true, slug: organizationSlug };
+}
+
 export interface OrganizationProfileUpdateInput {
   name: string;
   organizationType: OrganizationType;

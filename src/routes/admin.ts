@@ -20,7 +20,9 @@ import {
   sendPasswordResetForAdmin
 } from "../auth/passwordReset";
 import {
+  defaultNotificationPreferences,
   getAdminNotificationPreferences,
+  listOrganizationServingAreasForNotifications,
   updateAdminNotificationPreferences
 } from "../db/adminNotificationPreferences";
 import { DEMO_ORGANIZATION_SLUG } from "../constants/demo";
@@ -345,18 +347,19 @@ async function me(request: Request, env: Env): Promise<Response> {
       auth.admin!.id,
       auth.admin!.organizationId
     );
+    const notificationServingAreas = await listOrganizationServingAreasForNotifications(
+      env,
+      auth.admin!.organizationId
+    );
 
     return json({
       success: true,
       data: {
         admin: auth.admin,
         organization: mapAdminSessionOrganization(organization),
-        notificationPreferences: notificationPreferences ?? {
-          newSubmissions: true,
-          readyToSchedule: false,
-          volunteerUpdated: true,
-          adminJoined: auth.admin!.role === "owner"
-        }
+        notificationPreferences:
+          notificationPreferences ?? defaultNotificationPreferences(auth.admin!.role),
+        notificationServingAreas
       }
     });
   } catch (error) {
@@ -447,6 +450,8 @@ async function patchMe(request: Request, env: Env): Promise<Response> {
         readyToSchedule?: boolean;
         volunteerUpdated?: boolean;
         adminJoined?: boolean;
+        servingAreaScope?: "all" | "selected";
+        servingAreaIds?: number[];
       } = {};
 
       if (prefsBody.newSubmissions !== undefined) {
@@ -485,11 +490,45 @@ async function patchMe(request: Request, env: Env): Promise<Response> {
         updateInput.adminJoined = prefsBody.adminJoined;
       }
 
+      if (prefsBody.servingAreaScope !== undefined) {
+        if (prefsBody.servingAreaScope !== "all" && prefsBody.servingAreaScope !== "selected") {
+          return badRequest(
+            'notificationPreferences.servingAreaScope must be "all" or "selected".'
+          );
+        }
+
+        updateInput.servingAreaScope = prefsBody.servingAreaScope;
+      }
+
+      if (prefsBody.servingAreaIds !== undefined) {
+        if (!Array.isArray(prefsBody.servingAreaIds)) {
+          return badRequest("notificationPreferences.servingAreaIds must be an array of ids.");
+        }
+
+        const servingAreaIds: number[] = [];
+
+        for (const value of prefsBody.servingAreaIds) {
+          const id = typeof value === "number" ? value : Number(value);
+
+          if (!Number.isInteger(id) || id < 1) {
+            return badRequest(
+              "notificationPreferences.servingAreaIds must contain positive integers."
+            );
+          }
+
+          servingAreaIds.push(id);
+        }
+
+        updateInput.servingAreaIds = servingAreaIds;
+      }
+
       if (
         updateInput.newSubmissions === undefined &&
         updateInput.readyToSchedule === undefined &&
         updateInput.volunteerUpdated === undefined &&
-        updateInput.adminJoined === undefined
+        updateInput.adminJoined === undefined &&
+        updateInput.servingAreaScope === undefined &&
+        updateInput.servingAreaIds === undefined
       ) {
         return badRequest("Provide at least one notification preference to update.");
       }
@@ -512,17 +551,19 @@ async function patchMe(request: Request, env: Env): Promise<Response> {
       return serverError("Admin organization is not available.");
     }
 
+    const notificationServingAreas = await listOrganizationServingAreasForNotifications(
+      env,
+      admin.organizationId
+    );
+
     return json({
       success: true,
       data: {
         admin,
         organization: mapAdminSessionOrganization(organization),
-        notificationPreferences: notificationPreferences ?? {
-          newSubmissions: true,
-          readyToSchedule: false,
-          volunteerUpdated: true,
-          adminJoined: admin.role === "owner"
-        }
+        notificationPreferences:
+          notificationPreferences ?? defaultNotificationPreferences(admin.role),
+        notificationServingAreas
       }
     });
   } catch (error) {
@@ -578,18 +619,19 @@ async function patchOrganization(request: Request, env: Env): Promise<Response> 
       auth.admin!.id,
       auth.admin!.organizationId
     );
+    const notificationServingAreas = await listOrganizationServingAreasForNotifications(
+      env,
+      auth.admin!.organizationId
+    );
 
     return json({
       success: true,
       data: {
         admin: auth.admin,
         organization: mapAdminSessionOrganization(updated.organization),
-        notificationPreferences: notificationPreferences ?? {
-          newSubmissions: true,
-          readyToSchedule: false,
-          volunteerUpdated: true,
-          adminJoined: auth.admin!.role === "owner"
-        }
+        notificationPreferences:
+          notificationPreferences ?? defaultNotificationPreferences(auth.admin!.role),
+        notificationServingAreas
       }
     });
   } catch (error) {

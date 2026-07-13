@@ -77,6 +77,7 @@ Migrations live in `migrations/`:
 - `0010_submission_blackout_dates.sql` — unavailable date ranges per submission
 - `0012_schedules.sql` — schedules (`monthly` / `special_event`), connected serving areas, rhythms, and staffing requirements
 - `0014_generated_schedules.sql` — generated schedules (draft/published/archived, publish metadata, unsent volunteer updates), occurrences, requirements, assignments, notes, resources (R2 metadata), resource access tokens, pending update queue
+- `0015_admin_notification_serving_areas.sql` — per-admin serving-area scope for volunteer notification emails
 
 **R2 (occurrence resources):** `wrangler.toml` binds bucket `servewell-occurrence-resources` as `OCCURRENCE_RESOURCES`. Without the binding, resource upload returns storage unavailable.
 

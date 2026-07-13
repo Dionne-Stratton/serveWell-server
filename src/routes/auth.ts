@@ -6,6 +6,7 @@ import { requestChurchSlugHintForEmail } from "../auth/churchSlugHint";
 import { completePasswordReset, requestPasswordResetForEmail } from "../auth/passwordReset";
 import {
   createOrganizationWithAdmin,
+  getOrganizationSlugAvailability,
   mapOrganizationProfile
 } from "../db/organizationRegistration";
 import { findActiveAdminById } from "../db/adminUsers";
@@ -33,6 +34,14 @@ export async function authRoutes(
     }
 
     return registerOrganization(request, env, ctx);
+  }
+
+  if (url.pathname === "/api/auth/organization-slug-availability") {
+    if (request.method !== "GET") {
+      return methodNotAllowed();
+    }
+
+    return organizationSlugAvailability(request, env);
   }
 
   if (url.pathname === "/api/auth/login") {
@@ -119,7 +128,7 @@ async function registerOrganization(
     if (!created.ok) {
       if (created.reason === "slug_taken") {
         return badRequest(
-          "An organization with that URL slug already exists.",
+          "That URL slug is already taken. Try adding your city or neighborhood (for example, kairos-austin).",
           "ORGANIZATION_SLUG_TAKEN"
         );
       }
@@ -160,6 +169,22 @@ async function registerOrganization(
   } catch (error) {
     console.error("Failed organization registration", error);
     return serverError("Unable to create organization.");
+  }
+}
+
+async function organizationSlugAvailability(request: Request, env: Env): Promise<Response> {
+  const slug = new URL(request.url).searchParams.get("slug");
+
+  try {
+    const availability = await getOrganizationSlugAvailability(env, slug);
+
+    return json({
+      success: true,
+      data: availability
+    });
+  } catch (error) {
+    console.error("Failed organization slug availability check", error);
+    return serverError("Unable to check URL slug availability.");
   }
 }
 

@@ -27,7 +27,8 @@ export async function notifyAdminsOfVolunteerSelfUpdate(
 
   const recipients = await listAdminsForVolunteerUpdatedNotification(
     env,
-    context.organizationId
+    context.organizationId,
+    context.submissionId
   );
 
   if (recipients.length === 0) {
