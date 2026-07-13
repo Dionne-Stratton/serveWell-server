@@ -278,6 +278,11 @@ function normalizeRhythmRequirementsById(
     rows.push({ scheduleServingAreaId, neededCount });
   }
 
+  const areaIds = rows.map((row) => row.scheduleServingAreaId);
+  if (new Set(areaIds).size !== areaIds.length) {
+    return "Each serving area can only appear once per event.";
+  }
+
   return rows;
 }
 
@@ -476,6 +481,11 @@ function normalizeRequirements(
       customName,
       neededCount
     });
+  }
+
+  const requirementKeys = rows.map((row) => servingAreaKey(row.servingAreaId, row.customName));
+  if (new Set(requirementKeys).size !== requirementKeys.length) {
+    return "Each serving area can only appear once per event.";
   }
 
   return rows;
