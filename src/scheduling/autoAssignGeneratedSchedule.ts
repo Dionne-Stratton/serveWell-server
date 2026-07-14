@@ -201,6 +201,11 @@ export async function autoAssignGeneratedSchedule(
       const monthKey = `${bestId}:${calendarMonthKey(row.occurrenceDate)}`;
       assignmentsInMonth.set(monthKey, (assignmentsInMonth.get(monthKey) ?? 0) + 1);
 
+      const assignedProfile = profiles.get(bestId);
+      if (assignedProfile) {
+        assignedProfile.lastServedDateByServingAreaId.set(row.servingAreaId, row.occurrenceDate);
+      }
+
       assignedForRequirement += 1;
       slotsFilled += 1;
     }

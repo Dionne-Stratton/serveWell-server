@@ -162,8 +162,10 @@ export function scoreVolunteerForRequirement(
 
   score -= context.assignmentsInSchedule * 100;
 
-  if (profile.lastServedDate) {
-    const days = daysBetweenIso(profile.lastServedDate, context.occurrenceDate);
+  const lastServedForArea = profile.lastServedDateByServingAreaId.get(context.servingAreaId);
+
+  if (lastServedForArea) {
+    const days = daysBetweenIso(lastServedForArea, context.occurrenceDate);
     score += Math.min(Math.max(days, 0), 400) * 0.4;
   } else {
     score += 60;

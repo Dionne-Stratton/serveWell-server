@@ -24,7 +24,8 @@ export interface VolunteerSchedulingProfile {
   availabilityKeys: Set<string>;
   blackoutRanges: BlackoutRange[];
   confirmedRequirementKeys: Set<string>;
-  lastServedDate: string | null;
+  /** Latest published/archived assignment date per org serving area (intake area id). */
+  lastServedDateByServingAreaId: Map<number, string>;
 }
 
 export function effectiveFrequencyForServingArea(
@@ -108,7 +109,7 @@ export async function loadVolunteerSchedulingProfiles(
       availabilityKeys: new Set(),
       blackoutRanges: [],
       confirmedRequirementKeys: new Set(),
-      lastServedDate: null
+      lastServedDateByServingAreaId: new Map()
     });
   }
 
@@ -217,25 +218,28 @@ export async function loadVolunteerSchedulingProfiles(
 
   const lastServed = await env.DB.prepare(
     `
-    SELECT a.submission_id, MAX(gso.occurrence_date) AS last_date
+    SELECT a.submission_id, ssa.serving_area_id, MAX(gso.occurrence_date) AS last_date
     FROM generated_schedule_occurrence_assignments a
     INNER JOIN generated_schedule_occurrences gso ON gso.id = a.occurrence_id
     INNER JOIN generated_schedules gs ON gs.id = gso.generated_schedule_id
+    INNER JOIN generated_schedule_occurrence_requirements greq ON greq.id = a.requirement_id
+    INNER JOIN schedule_serving_areas ssa ON ssa.id = greq.schedule_serving_area_id
     WHERE a.organization_id = ?
       AND gs.organization_id = ?
-      AND gs.status = 'published'
+      AND gs.status IN ('published', 'archived')
+      AND ssa.serving_area_id IS NOT NULL
       AND a.submission_id IN (${placeholders})
-    GROUP BY a.submission_id
+    GROUP BY a.submission_id, ssa.serving_area_id
     `
   )
     .bind(organizationId, organizationId, ...ids)
-    .all<{ submission_id: number; last_date: string }>();
+    .all<{ submission_id: number; serving_area_id: number; last_date: string }>();
 
   for (const row of lastServed.results ?? []) {
     const profile = profiles.get(row.submission_id);
 
     if (profile) {
-      profile.lastServedDate = row.last_date;
+      profile.lastServedDateByServingAreaId.set(row.serving_area_id, row.last_date);
     }
   }
 

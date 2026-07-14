@@ -237,7 +237,7 @@ Requires migration `0012`. Full shapes: [API Contract](../docs/API-Contract.md) 
 
 ### Admin — Generated schedules (JWT)
 
-Dated schedules created from templates. **Create** runs auto-assignment (draft stays draft until publish). **Publish** sends initial volunteer emails. Edits on **published** schedules queue update emails until `POST .../send-volunteer-updates`. **Archive** published schedules for read-only retention (`POST .../archive`). Demo org skips outbound mail.
+Dated schedules created from templates. **Create** runs auto-assignment (draft stays draft until publish). Ranking prefers fewer assignments in the current schedule and a longer gap since the volunteer last served that **same serving area** on a **published or archived** schedule (drafts ignored). **Publish** sends initial volunteer emails. Edits on **published** schedules queue update emails until `POST .../send-volunteer-updates`. **Archive** published schedules for read-only retention (`POST .../archive`). Demo org skips outbound mail.
 
 | Method | Path | Notes |
 |--------|------|--------|
