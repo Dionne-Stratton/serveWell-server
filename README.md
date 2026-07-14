@@ -229,10 +229,11 @@ OAuth callback is a browser redirect (no JWT). Admin routes require `Authorizati
 | `GET` | `/api/admin/schedules/:id` | Template detail |
 | `PATCH` | `/api/admin/schedules/:id` | Update template name / type |
 | `DELETE` | `/api/admin/schedules/:id` | Delete template |
+| `POST` | `/api/admin/schedules/:id/duplicate` | Copy template (new name); serving areas + events + staffing; not generated schedules |
 | `PUT` | `/api/admin/schedules/:id/serving-areas` | Replace linked serving areas |
-| `PUT` | `/api/admin/schedules/:id/rhythms` | Replace events and staffing requirements |
+| `PUT` | `/api/admin/schedules/:id/rhythms` | Replace events and staffing requirements (each serving area at most once per event) |
 
-Requires migration `0012`.
+Requires migration `0012`. Full shapes: [API Contract](../docs/API-Contract.md) § Admin schedule templates.
 
 ### Admin — Generated schedules (JWT)
 
