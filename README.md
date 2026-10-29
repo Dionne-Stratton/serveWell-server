@@ -121,6 +121,32 @@ Recreating the D1 database is simpler than clearing Wrangler’s migration histo
 
 Re-connect Planning Center OAuth for any org after a remote reset (tokens lived in the old database).
 
+## Password hashing
+
+New passwords (signup, invites, and resets) use PBKDF2-HMAC-SHA256 with a fresh
+128-bit random salt and 100,000 iterations. Successful staff sign-in upgrades
+older 10,000-iteration PBKDF2 hashes and legacy salted SHA256 hashes automatically.
+The upgrade preserves existing sessions and uses a conditional database update
+so a concurrent password reset cannot be overwritten. No schema migration or
+frontend change is required. Inactive accounts retain their old hash until a
+successful sign-in or password reset.
+
+**Platform limitation:** Cloudflare production Web Crypto has a 100,000-iteration
+PBKDF2 ceiling ([Cloudflare workerd issue #1346](https://github.com/cloudflare/workerd/issues/1346)).
+Node and local workerd may allow higher counts, so passing local tests does not
+prove production accepts them. This raises the previous work factor tenfold, but
+is still below [OWASP's 600,000-iteration recommendation](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html#pbkdf2).
+Meeting that recommendation requires a separately benchmarked, Workers-compatible
+stronger KDF implementation or a managed identity provider; do not merely raise
+the Web Crypto constant. Benchmark sign-in in staging under the deployed plan's
+CPU limits before release. This patch does not change the authentication provider.
+
+Run `npm test` for password verification and login-upgrade regression tests, and
+`npm run typecheck` for the Worker type check. After deployment, verify a legacy
+account's first and second sign-ins, wrong-password rejection, signup, invite
+acceptance, and password reset. The demo seed's documented password still works
+and its legacy hash upgrades at first sign-in.
+
 ## Demo seed (local testing)
 
 After migrations, the demo organization is available:

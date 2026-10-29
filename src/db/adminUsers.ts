@@ -330,6 +330,28 @@ export async function getAdminSessionVersion(env: Env, adminUserId: number): Pro
   return row?.session_version ?? 0;
 }
 
+// A cost upgrade is not a password change: preserve session_version. Compare
+// the old hash so a concurrent password reset cannot be overwritten.
+export async function upgradeAdminPasswordHash(
+  env: Env,
+  adminUserId: number,
+  organizationId: number,
+  previousHash: string,
+  passwordHash: string
+): Promise<boolean> {
+  const result = await env.DB.prepare(
+    `
+    UPDATE admin_users
+    SET password_hash = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND organization_id = ? AND password_hash = ? AND is_active = 1
+    `
+  )
+    .bind(passwordHash, adminUserId, organizationId, previousHash)
+    .run();
+
+  return (result.meta.changes ?? 0) > 0;
+}
+
 export async function updateAdminPasswordHash(
   env: Env,
   adminUserId: number,

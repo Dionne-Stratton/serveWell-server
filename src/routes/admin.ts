@@ -1,10 +1,11 @@
 import { requireAdmin } from "../auth/adminGuard";
 import { requireOwner } from "../auth/adminOwnerGuard";
 import { signAdminJwt } from "../auth/jwt";
-import { verifyPassword } from "../auth/passwords";
+import { hashPassword, passwordNeedsRehash, verifyPassword } from "../auth/passwords";
 import {
   findActiveAdminByOrganizationSlugAndEmail,
-  updateAdminProfile
+  updateAdminProfile,
+  upgradeAdminPasswordHash
 } from "../db/adminUsers";
 import { permanentlyDeleteOrganization } from "../db/organizationDelete";
 import {
@@ -310,6 +311,25 @@ async function login(request: Request, env: Env): Promise<Response> {
 
     if (!organization) {
       return serverError("Admin organization is not available.");
+    }
+
+    if (passwordNeedsRehash(admin.passwordHash)) {
+      const upgraded = await upgradeAdminPasswordHash(
+        env,
+        admin.id,
+        admin.organizationId,
+        admin.passwordHash,
+        await hashPassword(password)
+      );
+
+      // The password changed or the account was deactivated during verification.
+      // Ask for a fresh login instead of issuing a token for the stale password.
+      if (!upgraded) {
+        return json(
+          { success: false, error: { message: "Please sign in again.", code: "INVALID_LOGIN" } },
+          { status: 401 }
+        );
+      }
     }
 
     const token = await signAdminJwt(safeAdmin, env);

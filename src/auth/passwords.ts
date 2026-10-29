@@ -1,40 +1,60 @@
+// Workers production Web Crypto caps PBKDF2 at 100,000 iterations (local
+// workerd/Node do not). Raising this blindly breaks signup and password resets.
+// This is below OWASP's 600,000 recommendation; see README's auth limitations.
+const PBKDF2_ITERATIONS = 100_000;
+const SHA256_BASE64 = /^[A-Za-z0-9+/]{43}=$/;
+
+export function passwordNeedsRehash(storedHash: string): boolean {
+  const [prefix, iterations] = storedHash.split("$");
+  return prefix === "sha256" ||
+    (prefix === "pbkdf2_sha256" && Number(iterations) < PBKDF2_ITERATIONS);
+}
+
 export async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
   try {
     const [prefix, ...parts] = storedHash.split("$");
 
-  if (prefix === "sha256") {
-    const [salt, expectedHash] = parts;
+    if (prefix === "sha256") {
+      const [salt, expectedHash] = parts;
 
-    if (!salt || !expectedHash) {
-      return false;
+      if (parts.length !== 2 || !salt || !SHA256_BASE64.test(expectedHash ?? "")) {
+        return false;
+      }
+
+      return equalHashes(await sha256(`${salt}:${password}`), expectedHash);
     }
 
-    return (await sha256(`${salt}:${password}`)) === expectedHash;
-  }
+    if (prefix === "pbkdf2_sha256") {
+      const [iterationsValue, salt, expectedHash] = parts;
 
-  if (prefix === "pbkdf2_sha256") {
-    const [iterationsValue, salt, expectedHash] = parts;
+      if (parts.length !== 3 || !iterationsValue || !salt || !SHA256_BASE64.test(expectedHash ?? "")) {
+        return false;
+      }
 
-    if (!iterationsValue || !salt || !expectedHash) {
-      return false;
+      const iterations = Number(iterationsValue);
+
+      if (!/^[1-9][0-9]*$/.test(iterationsValue) ||
+          !Number.isSafeInteger(iterations) || iterations > PBKDF2_ITERATIONS) {
+        return false;
+      }
+
+      return equalHashes(await pbkdf2Sha256(password, salt, iterations), expectedHash);
     }
 
-    const iterations = Number(iterationsValue);
-
-    if (!Number.isInteger(iterations) || iterations <= 0) {
-      return false;
-    }
-
-    return (await pbkdf2Sha256(password, salt, iterations)) === expectedHash;
-  }
-
-  return false;
+    return false;
   } catch {
     return false;
   }
 }
 
-const PBKDF2_ITERATIONS = 10_000;
+// Compare all characters of the fixed-size digests, without an early exit.
+function equalHashes(actual: string, expected: string): boolean {
+  let difference = actual.length ^ expected.length;
+  for (let index = 0; index < actual.length; index += 1) {
+    difference |= actual.charCodeAt(index) ^ expected.charCodeAt(index);
+  }
+  return difference === 0;
+}
 
 export async function hashPassword(password: string): Promise<string> {
   const salt = randomSalt();
